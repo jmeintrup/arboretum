@@ -5,6 +5,9 @@
 **arboretum** is a  graph library and CLI for creating tree decompositions.
 Various state of the art preprocessing, graph reductions, exact and heuristic algorithms for obtaining tree decompositions are implemented.
 
+*This repository is currently under development, the features and documentation presented here will be valid 
+once the first version is released on [crates.io](https://crates.io/)*
+
 # Features
 
 * Well known fast heuristics such as min-degree and min-fill and a higher quality randomized with lookahead [[1]](#1)[[2]](#1)
@@ -52,7 +55,6 @@ Available CLI arguments:
 
 Simply add **arboretum** to your projects `cargo.toml` under dependencies and get started. For documentation refer to the [docs.rs](https://docs.rs/arboretum).
 
-
 # References
 
 <a id="1">[1]</a> 
@@ -89,4 +91,7 @@ Tamaki, H.. “Positive-instance driven dynamic programming for treewidth.” ES
 
 <a id="9">[9]</a> 
 Bannach, Max and Sebastian Berndt. “Positive-Instance Driven Dynamic Programming for Graph Searching.” WADS (2019).
+
+# License
+This Software is licensed under the MIT-License which can be found in the `LICENSE` file in this repository.
 
