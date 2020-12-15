@@ -1,10 +1,10 @@
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::graph::tree_decomposition::{TreeDecomposition, TreeDecompositionError};
 use std::borrow::Borrow;
 use std::cmp::max;
 use std::time::{Duration, SystemTime};
+use fnv::FnvHashSet;
 
 pub trait Stopper {
     fn stop(&mut self) -> bool;
@@ -52,53 +52,6 @@ impl EliminationOrder {
 
     pub fn order(&self) -> &[usize] {
         self.data.as_slice()
-    }
-
-    pub fn to_tree_decomposition<G: Graph>(
-        &self,
-        graph: &G,
-    ) -> Result<TreeDecomposition, TreeDecompositionError> {
-        let mut tree_decomposition = TreeDecomposition::with_capacity(self.data.len());
-        let mut graph = HashMapGraph::from_graph(graph.borrow());
-
-        let mut stack: Vec<(usize, Vec<usize>)> = Vec::with_capacity(self.data.len());
-        self.data.iter().for_each(|v| {
-            let bag: Vec<usize> = graph.neighborhood(*v).collect();
-            stack.push((*v, bag));
-            graph.eliminate_vertex(*v);
-        });
-        let first_bag = stack.last().unwrap().0;
-        let (v, nb) = stack.pop().unwrap();
-        let mut bag: Vec<usize> = nb.iter().cloned().collect();
-        bag.push(v);
-        tree_decomposition.add_bag(v, bag.as_slice());
-
-        stack.iter().rev().for_each(|(v, nb)| {
-            let found = tree_decomposition.bags().iter().find(|(_, b)| {
-                for x in nb {
-                    if !b.contains(x) {
-                        return false;
-                    }
-                }
-                return true;
-            });
-
-            let found = if found.is_some() {
-                *found.unwrap().0
-            } else {
-                first_bag
-            };
-
-            let mut bag: Vec<usize> = nb.iter().cloned().collect();
-            bag.push(*v);
-            tree_decomposition.add_bag(*v, bag.as_slice());
-            tree_decomposition.add_edge(*v, found);
-        });
-
-        match tree_decomposition.validate(&graph) {
-            Err(e) => Err(e),
-            Ok(_) => Ok(tree_decomposition),
-        }
     }
 }
 

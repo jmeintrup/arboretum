@@ -3,14 +3,26 @@ use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::lowerbound::minor_min_width;
-use crate::upperbound::{HeuristicDecomposer, MinDegreeStrategy, MinFillStrategy};
+use crate::lowerbound::{MinorMinWidth, LowerboundHeuristic};
+use crate::upperbound::{UpperboundHeuristic, HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillStrategy};
 use fnv::FnvHashSet;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
 use std::cmp::max;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use crate::exact::ExactSolver;
+use std::hash::Hash;
+
+pub trait Preprocessor {
+    fn preprocess(&mut self);
+
+    fn combine_into_td(self, td: TreeDecomposition) -> TreeDecomposition;
+
+    fn into_td(self) -> TreeDecomposition;
+
+    fn graph(&self) -> &HashMapGraph;
+}
 
 #[inline]
 fn eliminate(v: usize, graph: &mut HashMapGraph, stack: &mut Vec<FnvHashSet<usize>>) {
@@ -64,14 +76,6 @@ pub struct RuleBasedPreprocessor {
     processed_graph: HashMapGraph,
 }
 
-pub trait Preprocessor {
-    fn preprocess(&mut self);
-
-    fn combine_into_td(self, td: TreeDecomposition) -> TreeDecomposition;
-
-    fn into_td(self) -> TreeDecomposition;
-}
-
 impl Preprocessor for RuleBasedPreprocessor {
     fn preprocess(&mut self) {
         self.lower_bound = 0;
@@ -105,6 +109,10 @@ impl Preprocessor for RuleBasedPreprocessor {
         self.process_stack();
         self.partial_tree_decomposition
     }
+
+    fn graph(&self) -> &HashMapGraph {
+        &self.processed_graph
+    }
 }
 
 impl RuleBasedPreprocessor {
@@ -115,10 +123,6 @@ impl RuleBasedPreprocessor {
             partial_tree_decomposition: TreeDecomposition::new(),
             processed_graph: graph.clone(),
         }
-    }
-
-    pub fn graph(&self) -> &HashMapGraph {
-        &self.processed_graph
     }
 
     fn apply_rules(&mut self) -> bool {
@@ -611,7 +615,7 @@ impl SafeSeparatorFramework {
             lb,
             atom_states
                 .iter()
-                .map(|s| minor_min_width(&s.graph))
+                .map(|s| MinorMinWidth::new(s.graph.clone()).compute())
                 .max()
                 .unwrap(),
         );
@@ -620,9 +624,9 @@ impl SafeSeparatorFramework {
                 continue;
             }
             let min_fill =
-                HeuristicDecomposer::new(self.graph.clone(), MinFillStrategy).decompose();
+                HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinFillStrategy).compute_upperbound();
             let min_degree =
-                HeuristicDecomposer::new(self.graph.clone(), MinDegreeStrategy).decompose();
+                HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinDegreeStrategy).compute_upperbound();
             s.tree_decomposition = if min_fill.max_bag_size < min_degree.max_bag_size {
                 Some(min_fill)
             } else {
@@ -630,7 +634,8 @@ impl SafeSeparatorFramework {
             };
             let width = s.tree_decomposition.as_ref().unwrap().max_bag_size - 1;
             if width > lb {
-                if let Ok(atom_td) = PID::with_bounds(&s.graph, lb as u32, width as u32).decompose()
+                let solver =  PID::with_bounds(&s.graph, lb as u32, width as u32);
+                if let Ok(atom_td) = solver.compute_exact()
                 {
                     s.tree_decomposition = Some(atom_td);
                     lb = max(s.tree_decomposition.as_ref().unwrap().max_bag_size - 1, lb);

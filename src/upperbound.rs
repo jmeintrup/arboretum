@@ -7,7 +7,11 @@ use fnv::{FnvHashMap, FnvHashSet};
 use rand::prelude::*;
 use std::cmp::max;
 
-pub struct HeuristicDecomposer<G: MutableGraph, S: SelectionStrategy<G>> {
+pub trait UpperboundHeuristic {
+    fn compute_upperbound(self) -> TreeDecomposition;
+}
+
+pub struct HeuristicEliminationOrderDecomposer<G: MutableGraph, S: SelectionStrategy<G>> {
     graph: G,
     selection_strategy: S,
     bags: FnvHashMap<usize, FnvHashSet<usize>>,
@@ -16,7 +20,7 @@ pub struct HeuristicDecomposer<G: MutableGraph, S: SelectionStrategy<G>> {
     tree_decomposition: TreeDecomposition,
 }
 
-impl<G: MutableGraph, S: SelectionStrategy<G>> HeuristicDecomposer<G, S> {
+impl<G: MutableGraph, S: SelectionStrategy<G>> HeuristicEliminationOrderDecomposer<G, S> {
     pub fn new(graph: G, selection_strategy: S) -> Self {
         let capacity = graph.order();
         Self {
@@ -28,8 +32,10 @@ impl<G: MutableGraph, S: SelectionStrategy<G>> HeuristicDecomposer<G, S> {
             tree_decomposition: TreeDecomposition::new(),
         }
     }
+}
 
-    pub fn decompose(mut self) -> TreeDecomposition {
+impl<G: MutableGraph, S: SelectionStrategy<G>> UpperboundHeuristic for HeuristicEliminationOrderDecomposer<G, S> {
+    fn compute_upperbound(mut self) -> TreeDecomposition {
         let mut max_bag = 2;
 
         while self.graph.order() >= max_bag {
@@ -187,46 +193,6 @@ impl<'a, G: MutableGraph, S: Stopper> IterativeLocalSearch<'a, G, S> {
             None => None,
         }
     }
-}
-
-fn min_by<G: MutableGraph, S: SelectionStrategy<G> + Copy + Clone>(
-    graph: &G,
-    strategy: S,
-) -> EliminationOrder {
-    let mut cloned = graph.clone();
-    let mut data = Vec::with_capacity(cloned.order());
-    let mut width: u32 = 1;
-    let m = if cloned.order() < 2 {
-        0
-    } else {
-        cloned.order() - 2
-    };
-    while data.len() < m {
-        let to_be_eliminated = strategy.next(&cloned);
-        width = max(width, cloned.degree(to_be_eliminated) as u32);
-        cloned.eliminate_vertex(to_be_eliminated);
-        data.push(to_be_eliminated);
-    }
-    // order <= 2 the order does not matter, and the width does not change
-    cloned.vertices().for_each(|v| {
-        data.push(v);
-    });
-
-    EliminationOrder::new(data, width)
-}
-
-pub fn min_degree<G: MutableGraph>(graph: &G) -> EliminationOrder {
-    min_by(graph, MinDegreeStrategy)
-}
-
-pub fn min_fill_degree<G: MutableGraph>(graph: &G, alpha: f64, beta: f64) -> EliminationOrder {
-    assert!(alpha < 1f64);
-    assert!(beta < 1f64);
-    min_by(graph, MinFillDegreeStrategy { alpha, beta })
-}
-
-pub fn min_fill<G: MutableGraph>(graph: &G) -> EliminationOrder {
-    min_by(graph, MinFillStrategy)
 }
 
 pub trait SelectionStrategy<G: Graph> {

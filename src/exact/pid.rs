@@ -12,6 +12,8 @@ use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::Filter;
+use crate::exact::ExactSolver;
+use std::marker::PhantomData;
 
 type BlockCache = FnvHashMap<BitSet, Block>;
 type OBlockCache = FnvHashMap<BitSet, OBlock>;
@@ -53,8 +55,8 @@ impl From<HeapBitset> for BitSet {
     }
 }
 
-pub struct PID<'a, G: Graph> {
-    og_graph: &'a G,
+pub struct PID<G: Graph> {
+    phantom: PhantomData<G>,
     og_to_self: FnvHashMap<u32, u32>,
     self_to_og: Vec<u32>,
     graph: BitGraph,
@@ -71,40 +73,45 @@ pub struct PID<'a, G: Graph> {
     cache: Cache,
 }
 
-impl<'a, G: Graph> PID<'a, G> {
-    pub fn new(og_graph: &'a G) -> Self {
-        let mut og_to_self = FnvHashMap::default();
-        let mut self_to_og = Vec::with_capacity(og_graph.order());
-
-        for (idx, v) in og_graph.vertices().enumerate() {
-            og_to_self.insert(v as u32, idx as u32);
-            self_to_og.push(v as u32);
-        }
-
-        let graph = BitGraph::from_graph(og_graph, &og_to_self);
-        Self {
-            og_graph,
-            og_to_self,
-            self_to_og,
-            graph,
-            target_width: 0,
-            upper_bound: (og_graph.order()) as u32,
-            ready_queue: Default::default(),
-            pending_endorsers: Default::default(),
-            i_blocks: Default::default(),
-            o_blocks: Default::default(),
-            buildable: Default::default(),
-            feasible: Default::default(),
-            solution: None,
-            cache: Cache {
-                o_block_cache: OBlockCache::default(),
-                i_block_cache: IBlockCache::default(),
-                block_cache: BlockCache::default(),
-            },
-        }
+impl<G: Graph> PID<G> {
+    fn create_tree_decomposition(&self) -> TreeDecomposition {
+        let pmc = self.solution.as_ref().unwrap().clone();
+        let mut td = TreeDecomposition::new();
+        let vertex_set = self.translate_vertex_set(&pmc.vertex_set);
+        let parent = td.add_bag(vertex_set);
+        self.td_rec(parent, &mut td, &pmc);
+        td
     }
 
-    pub fn with_bounds(og_graph: &'a G, lowerbound: u32, upperbound: u32) -> Self {
+    fn translate_vertex_set(&self, vertex_set: &BitSet) -> FnvHashSet<usize> {
+        vertex_set
+            .iter()
+            .map(|v| self.self_to_og[v] as usize)
+            .collect()
+    }
+
+    fn td_rec(&self, parent: usize, td: &mut TreeDecomposition, pmc: &PMC) -> () {
+        let children = pmc.inbounds.clone();
+        for c in children
+            .iter()
+            .map(|c| self.cache.i_block_cache.get(&c.component))
+            .filter(|ib| ib.is_some())
+            .map(|ib| &ib.unwrap().endorser)
+        {
+            let vertex_set = self.translate_vertex_set(&c.vertex_set);
+            let new_parent = td.add_bag(vertex_set);
+            td.add_edge(parent, new_parent);
+            self.td_rec(new_parent, td, c);
+        }
+    }
+}
+
+impl<G: Graph> ExactSolver<G> for PID<G> {
+    fn with_graph(og_graph: &G) -> Self {
+        Self::with_bounds(og_graph, 0, (og_graph.order()) as u32)
+    }
+
+    fn with_bounds(og_graph: &G, lowerbound: u32, upperbound: u32) -> Self {
         let mut og_to_self = FnvHashMap::default();
         let mut self_to_og = Vec::with_capacity(og_graph.order());
 
@@ -115,7 +122,7 @@ impl<'a, G: Graph> PID<'a, G> {
 
         let graph = BitGraph::from_graph(og_graph, &og_to_self);
         Self {
-            og_graph,
+            phantom: Default::default(),
             og_to_self,
             self_to_og,
             graph,
@@ -136,8 +143,7 @@ impl<'a, G: Graph> PID<'a, G> {
         }
     }
 
-    pub fn decompose(&mut self) -> Result<TreeDecomposition, u32> {
-        println!("c order: {}", self.graph.order());
+    fn compute_exact(mut self) -> Result<TreeDecomposition, ()> {
         if self.graph.order() <= 2 {
             let mut td = TreeDecomposition::new();
             if self.graph.order() > 0 {
@@ -230,42 +236,11 @@ impl<'a, G: Graph> PID<'a, G> {
             "Err: target_width:{}, lower_bound:{}",
             self.target_width, self.upper_bound
         );
-        Err(self.target_width)
+        Err(())
         /*let mut td = TreeDecomposition::new();
         let bag = (0..self.graph.order()).map(|i| { self.self_to_og[i] as usize }).collect();
         td.add_bag(bag);
         return Ok(td);*/
-    }
-
-    fn create_tree_decomposition(&self) -> TreeDecomposition {
-        let pmc = self.solution.as_ref().unwrap().clone();
-        let mut td = TreeDecomposition::new();
-        let vertex_set = self.translate_vertex_set(&pmc.vertex_set);
-        let parent = td.add_bag(vertex_set);
-        self.td_rec(parent, &mut td, &pmc);
-        td
-    }
-
-    fn translate_vertex_set(&self, vertex_set: &BitSet) -> FnvHashSet<usize> {
-        vertex_set
-            .iter()
-            .map(|v| self.self_to_og[v] as usize)
-            .collect()
-    }
-
-    fn td_rec(&self, parent: usize, td: &mut TreeDecomposition, pmc: &PMC) -> () {
-        let children = pmc.inbounds.clone();
-        for c in children
-            .iter()
-            .map(|c| self.cache.i_block_cache.get(&c.component))
-            .filter(|ib| ib.is_some())
-            .map(|ib| &ib.unwrap().endorser)
-        {
-            let vertex_set = self.translate_vertex_set(&c.vertex_set);
-            let new_parent = td.add_bag(vertex_set);
-            td.add_edge(parent, new_parent);
-            self.td_rec(new_parent, td, c);
-        }
     }
 }
 

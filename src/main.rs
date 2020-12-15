@@ -3,7 +3,6 @@ use arboretum::graph::graph::Graph;
 use arboretum::graph::hash_map_graph::HashMapGraph;
 use arboretum::graph::mutable_graph::MutableGraph;
 use arboretum::io::DimacsRead;
-use arboretum::lowerbound::minor_min_width;
 use arboretum::preprocessing::{Preprocessor, RuleBasedPreprocessor, SafeSeparatorFramework};
 use std::convert::TryFrom;
 use std::fs::File;
@@ -12,7 +11,7 @@ use std::io::BufReader;
 use std::time::SystemTime;
 
 fn benchmark_dimacs() -> io::Result<()> {
-    let file = File::open("data/ex001.gr").unwrap();
+    let file = File::open("data/ex087.gr").unwrap();
     let reader = BufReader::new(file);
     let mut graph = HashMapGraph::try_from(DimacsRead(reader)).unwrap();
 
