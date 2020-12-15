@@ -1,0 +1,3 @@
+[submodule "tests/td-validate"]
+	path = tests/td-validate
+	url = https://github.com/holgerdell/td-validate
