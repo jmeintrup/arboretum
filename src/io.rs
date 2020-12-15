@@ -23,6 +23,7 @@ impl<T: BufRead> TryFrom<PaceReader<T>> for HashMapGraph {
                 "p" => {
                     order = Some(parse_order(&elements)?);
                     graph = Some(HashMapGraph::with_capacity(order.unwrap()));
+                    (0..order.unwrap()).for_each(|v| graph.as_mut().unwrap().add_vertex(v));
                 }
                 _ => {
                     match graph.as_mut() {
@@ -76,16 +77,7 @@ fn parse_order(elements: &[&str]) -> Result<usize, std::io::Error> {
         ))
     }
     match elements[2].parse::<usize>() {
-        Ok(order) => {
-            return if order == 0 {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Invalid order of graph",
-                ))
-            } else {
-                Ok(order)
-            }
-        },
+        Ok(order) => Ok(order),
         Err(_) => {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,

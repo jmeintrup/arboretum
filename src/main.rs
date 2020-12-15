@@ -7,6 +7,7 @@ use std::convert::TryFrom;
 use std::io;
 use std::io::stdin;
 use std::time::SystemTime;
+use fnv::FnvHashSet;
 
 fn main() -> io::Result<()> {
     let graph: HashMapGraph = {
@@ -14,6 +15,15 @@ fn main() -> io::Result<()> {
         let reader = PaceReader(buffer.lock());
         HashMapGraph::try_from(reader)?
     };
+    if graph.order() <= 2 {
+        let mut td = TreeDecomposition::new();
+        let vertices: FnvHashSet<_> = graph.vertices().collect();
+        if vertices.len() > 0 {
+            td.add_bag(vertices);
+        }
+        print_pace_td(&td, &graph);
+        return Ok(());
+    }
 
     let mut reducer = RuleBasedPreprocessor::new(&graph);
     let m: usize = graph.vertices().map(|v| graph.degree(v)).sum();
