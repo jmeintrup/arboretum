@@ -1,114 +1,96 @@
-use crate::datastructures::BitSet;
-use crate::graph::bit_graph::BitGraph;
+use std::io::{BufRead, ErrorKind};
+use std::convert::TryFrom;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
-use std::convert::TryFrom;
-use std::io::{BufRead, BufReader, Read};
-use std::{fs, io};
+use crate::graph::graph::Graph;
 
-fn nums_error(res: &[Result<usize, std::num::ParseIntError>]) -> bool {
-    res.len() != 2 || res[0].is_err() || res[1].is_err()
-}
+pub struct PaceReader<T: BufRead>(pub T);
 
-pub fn dimacs_p(line: &str) -> Result<(usize, usize), std::io::Error> {
-    let nums: Vec<Result<usize, std::num::ParseIntError>> = line
-        .trim_start_matches('p')
-        .trim()
-        .split(' ')
-        .skip(1)
-        .map(|s| s.parse())
-        .collect();
-    if nums_error(&nums) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Invalid line",
-        ));
-    }
-    let u = nums[0].as_ref().unwrap();
-    let v = nums[1].as_ref().unwrap();
-    Ok((*u, *v))
-}
-
-pub fn dimacs_e(line: &str) -> Result<(usize, usize), std::io::Error> {
-    let nums: Vec<Result<usize, std::num::ParseIntError>> = line
-        .trim_start_matches('e')
-        .trim()
-        .split(' ')
-        .map(|s| s.parse())
-        .collect();
-    if nums_error(&nums) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Invalid line",
-        ));
-    }
-    let u = nums[0].as_ref().unwrap() - 1;
-    let v = nums[1].as_ref().unwrap() - 1;
-    Ok((u, v))
-}
-
-pub struct DimacsRead<T: BufRead>(pub T);
-
-impl<T: BufRead> TryFrom<DimacsRead<T>> for HashMapGraph {
+impl<T: BufRead> TryFrom<PaceReader<T>> for HashMapGraph {
     type Error = std::io::Error;
 
-    fn try_from(reader: DimacsRead<T>) -> Result<Self, Self::Error> {
-        let mut reader = reader.0;
-        let mut graph = HashMapGraph::new();
-        for line in reader.lines().map(|line| line.unwrap()) {
-            match line.chars().next() {
-                Some('p') => {}
-                Some('c') => {}
-                _ => {
-                    let (u, v) = dimacs_e(&line)?;
-                    if u != v {
-                        graph.add_edge(u, v);
-                    }
-                }
-            };
-        }
-        return Ok(graph);
-    }
-}
-
-impl<T: BufRead> TryFrom<DimacsRead<T>> for BitGraph {
-    type Error = std::io::Error;
-
-    fn try_from(reader: DimacsRead<T>) -> Result<Self, Self::Error> {
-        let mut reader = reader.0;
-
-        let mut graph = None;
+    fn try_from(reader: PaceReader<T>) -> Result<Self, Self::Error> {
+        let reader = reader.0;
+        let mut graph: Option<HashMapGraph> = None;
+        let mut order: Option<usize> = None;
         for line in reader.lines() {
             let line = line?;
-            match line.chars().next() {
-                Some('c') => {}
-                Some('p') => {
-                    let (n, _) = dimacs_p(line.as_str())?;
-                    graph = Some(vec![BitSet::new(n); n]);
+            let elements: Vec<_> = line.split(" ").collect();
+            match elements[0] {
+                "c" => {
+                    // who cares about comments..
+                }
+                "p" => {
+                    order = Some(parse_order(&elements)?);
+                    graph = Some(HashMapGraph::with_capacity(order.unwrap()));
                 }
                 _ => {
-                    let (u, v) = dimacs_e(line.as_str())?;
-                    if u != v {
-                        if graph.is_none() {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                "Invalid line",
-                            ));
+                    match graph.as_mut() {
+                        Some(graph) => {
+                            let u = parse_vertex(elements[0], order.unwrap())?;
+                            let v = parse_vertex(elements[1], order.unwrap())?;
+                            graph.add_edge(u, v);
+                        },
+                        None => {
+                            return Err(std::io::Error::new(ErrorKind::Other, "Edges encountered before graph creation"));
                         }
-                        let mut graph = graph.as_mut().unwrap();
-                        graph[u].set_bit(v);
-                        graph[v].set_bit(u);
                     }
                 }
             };
         }
-
-        if graph.is_none() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Invalid line",
-            ));
+        match graph {
+            Some(graph) => Ok(graph),
+            None => {
+                Err(std::io::Error::new(ErrorKind::Other, "No graph created during parsing"))
+            }
         }
-        Ok(graph.unwrap().into())
+    }
+}
+
+fn parse_vertex(v: &str, order: usize) -> Result<usize, std::io::Error> {
+    match v.parse::<usize>() {
+        Ok(u) => {
+            return if u == 0 || u > order {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Invalid vertex label",
+                ))
+            } else {
+                Ok(u - 1)
+            }
+        },
+        Err(_) => {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Invalid vertex label",
+            ))
+        }
+    }
+}
+
+fn parse_order(elements: &[&str]) -> Result<usize, std::io::Error> {
+    if elements.len() < 3 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid line received starting with p",
+        ))
+    }
+    match elements[2].parse::<usize>() {
+        Ok(order) => {
+            return if order == 0 {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Invalid order of graph",
+                ))
+            } else {
+                Ok(order)
+            }
+        },
+        Err(_) => {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Invalid order of graph",
+            ))
+        }
     }
 }

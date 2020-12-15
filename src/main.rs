@@ -1,19 +1,19 @@
 use arboretum::graph::bag::TreeDecomposition;
 use arboretum::graph::graph::Graph;
 use arboretum::graph::hash_map_graph::HashMapGraph;
-use arboretum::graph::mutable_graph::MutableGraph;
-use arboretum::io::DimacsRead;
+use arboretum::io::PaceReader;
 use arboretum::preprocessing::{Preprocessor, RuleBasedPreprocessor, SafeSeparatorFramework};
 use std::convert::TryFrom;
-use std::fs::File;
 use std::io;
-use std::io::BufReader;
+use std::io::stdin;
 use std::time::SystemTime;
 
-fn benchmark_dimacs() -> io::Result<()> {
-    let file = File::open("data/ex087.gr").unwrap();
-    let reader = BufReader::new(file);
-    let mut graph = HashMapGraph::try_from(DimacsRead(reader)).unwrap();
+fn main() -> io::Result<()> {
+    let graph: HashMapGraph = {
+        let buffer = stdin();
+        let reader = PaceReader(buffer.lock());
+        HashMapGraph::try_from(reader)?
+    };
 
     let mut reducer = RuleBasedPreprocessor::new(&graph);
     let m: usize = graph.vertices().map(|v| graph.degree(v)).sum();
@@ -34,7 +34,6 @@ fn benchmark_dimacs() -> io::Result<()> {
     );
 
     let td = if reduced_graph.order() == 0 {
-        //done
         reducer.into_td()
     } else {
         let framework = SafeSeparatorFramework::new(reduced_graph.clone(), 4);
@@ -56,10 +55,6 @@ fn benchmark_dimacs() -> io::Result<()> {
     }
     print_pace_td(&td, &graph);
     Ok(())
-}
-
-fn main() -> io::Result<()> {
-    benchmark_dimacs()
 }
 
 pub fn print_pace_td<G: Graph>(td: &TreeDecomposition, graph: &G) {
