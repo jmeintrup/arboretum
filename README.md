@@ -1,4 +1,4 @@
-<div style="text-align:center">
+<div style="text-align:center;">
 	<img src="assets/logo_transparent.png" style="width: 240px;">
 </div>
 
