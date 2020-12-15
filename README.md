@@ -2,21 +2,21 @@
 	<img src="assets/logo_transparent.png" style="width: 240px;">
 </div>
 
-**arboretum** is a  graph library and CLI for creating tree decompositions.
+**arboretum** is a  graph library and CLI for computing tree decompositions.
 Various state of the art preprocessing, graph reductions, exact and heuristic algorithms for obtaining tree decompositions are implemented.
 
 *This repository is currently under development, the features and documentation presented here will be valid 
-once the first version is released on [crates.io](https://crates.io/)*
+once the first version is released on [crates.io](https://crates.io/) The first release is planned for January 2021 and will include all the features mentioned here.*
 
 # Features
 
 * Well known fast heuristics such as min-degree and min-fill and a higher quality randomized with lookahead [[1]](#1)[[2]](#1)
-* Metaheuristics such as tabu-local search [ and genetic algorithms [[3]](#3) and a novel algorithm based on the idea of artificial bee colony 
+* Metaheuristics such as tabu-local search and genetic algorithms [[3]](#3) and a novel algorithm based on the idea of artificial bee colony 
 * Minor-min-width lowerbound heuristic [[4]](#4)
 * Rule-based preprocessing for reducing graphs and obtaining tree-decompositions of graphs of treewidth ≤ 3 [[5]](#5)
 * Graph decomposition based on the notion of safe separators [[6]](#6)
 * State-of-the-art exact algorithms [[2]](#2)[[7]](#7)[[8]](#8)[[9]](#9)
-* A Classic branch-and-bound exact algorithm based on QuickBB [[10]](#10)
+* A classic branch-and-bound exact algorithm based on QuickBB [[10]](#10)
 
 # The CLI
 ## Build
