@@ -75,9 +75,6 @@ impl Solver {
                         td.combine_with_or_replace(0, reducer.combine_into_td(partial_td));
                     }
                 }
-                if let Err(e) = td.verify(&sub_graph) {
-                    println!("c SUBGRAPH ERROR: {}", e);
-                }
             }
         }
         td

@@ -101,27 +101,3 @@ pub fn print_pace_td<G: Graph>(td: &TreeDecomposition, graph: &G) {
         }
     });
 }
-
-pub fn print_graphviz<G: Graph>(td: &TreeDecomposition, graph: &G) {
-    let bag_count: usize = td.bags.len();
-    let max_bag: usize = td.max_bag_size;
-    td.bags().iter().for_each(|b| {
-        let mut tmp: Vec<_> = b.vertex_set.iter().copied().collect();
-        tmp.sort();
-        let vertices: Vec<_> = tmp.iter().map(|i| (i).to_string()).collect();
-        let mut init = String::new();
-        init.push_str(&format!(" [label=\"{}: ", b.id));
-        let mut vertices = vertices.iter().fold(init, |mut acc, v| {
-            acc.push_str(v.as_str());
-            acc.push_str(" ");
-            acc
-        });
-        vertices.push_str("\"]");
-        println!("b{} {}", b.id, vertices);
-    });
-    td.bags().iter().for_each(|b| {
-        for child in b.neighbors.iter().copied().filter(|i| *i > b.id) {
-            println!("b{} -- b{}", b.id, child);
-        }
-    });
-}

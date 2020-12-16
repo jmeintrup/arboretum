@@ -441,7 +441,7 @@ impl SearchState {
         log_state.increment(self.separation_level);
         self.log_state.set(log_state);
         //todo: add solver builder that returns a solver that is then called on the graph
-        /*let min_fill =
+        let min_fill =
             HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinFillStrategy)
                 .compute_upperbound();
         let min_degree =
@@ -467,10 +467,7 @@ impl SearchState {
         match solver.compute_exact() {
             Ok(td) => td,
             Err(_) => upperbound,
-        }*/
-        let mut td = TreeDecomposition::new();
-        td.add_bag(self.graph.vertices().collect());
-        td
+        }
     }
 
     pub fn find_separator(&self) -> Option<FnvHashSet<usize>> {
@@ -512,13 +509,10 @@ impl SafeSeparatorFramework {
 
     pub fn compute(mut self) -> DecompositionResult {
         let mut td = self.search_state.search();
-        if let Err(e) = td.verify(&self.graph) {
-            println!("c ERROR: {}", e);
-        }
         let mut lb = { self.lower_bound.get() };
         let mut log_state = { self.log_state.get() };
 
-        let mut atom_states: Vec<AtomState> = Vec::default();
+        /*let mut atom_states: Vec<AtomState> = Vec::default();
         for bag in td
             .bags
             .iter()
@@ -578,14 +572,8 @@ impl SafeSeparatorFramework {
                     lb = max(s.tree_decomposition.as_ref().unwrap().max_bag_size - 1, lb);
                 };
             }
-            if let Err(e) = s.tree_decomposition.as_ref().unwrap().verify(&s.graph) {
-                println!("c ERROR: {}", e);
-            }
             td.replace_bag(s.target_bag, s.tree_decomposition.unwrap(), &s.graph);
-        }
-        if let Err(e) = td.verify(&self.graph) {
-            println!("c ERROR: {}", e);
-        }
+        }*/
         DecompositionResult {
             tree_decomposition: td,
             decomposition_information: self.log_state.get(),
