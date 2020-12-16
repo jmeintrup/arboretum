@@ -1,10 +1,10 @@
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
+use fnv::FnvHashSet;
 use std::borrow::Borrow;
 use std::cmp::max;
 use std::time::{Duration, SystemTime};
-use fnv::FnvHashSet;
 
 pub trait Stopper {
     fn stop(&mut self) -> bool;

@@ -34,7 +34,9 @@ impl<G: MutableGraph, S: SelectionStrategy<G>> HeuristicEliminationOrderDecompos
     }
 }
 
-impl<G: MutableGraph, S: SelectionStrategy<G>> UpperboundHeuristic for HeuristicEliminationOrderDecomposer<G, S> {
+impl<G: MutableGraph, S: SelectionStrategy<G>> UpperboundHeuristic
+    for HeuristicEliminationOrderDecomposer<G, S>
+{
     fn compute_upperbound(mut self) -> TreeDecomposition {
         let mut max_bag = 2;
 

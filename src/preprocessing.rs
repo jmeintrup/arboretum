@@ -1,18 +1,20 @@
 use crate::exact::pid::PID;
+use crate::exact::ExactSolver;
 use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::lowerbound::{MinorMinWidth, LowerboundHeuristic};
-use crate::upperbound::{UpperboundHeuristic, HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillStrategy};
+use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
+use crate::upperbound::{
+    HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillStrategy, UpperboundHeuristic,
+};
 use fnv::FnvHashSet;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
 use std::cmp::max;
 use std::collections::VecDeque;
-use std::rc::Rc;
-use crate::exact::ExactSolver;
 use std::hash::Hash;
+use std::rc::Rc;
 
 pub trait Preprocessor {
     fn preprocess(&mut self);
@@ -44,7 +46,6 @@ struct Cube {
 
 #[derive(PartialEq, PartialOrd, Eq, Ord, Clone, Copy, Debug)]
 enum SeparationLevel {
-    NotConnected,
     Connected,
     BiConnected,
     TriConnected,
@@ -57,7 +58,6 @@ enum SeparationLevel {
 impl SeparationLevel {
     pub fn increment(&self) -> Option<Self> {
         match self {
-            Self::NotConnected => Some(Self::Connected),
             Self::Connected => Some(Self::BiConnected),
             Self::BiConnected => Some(Self::TriConnected),
             Self::TriConnected => Some(Self::Clique),
@@ -331,7 +331,8 @@ impl RuleBasedPreprocessor {
     }
 
     fn remove_low_degree(&mut self) {
-        // remove all low degree vertices
+        // remove all low degree vertices. First remove all islets, then all islets and 1-degree,
+        // then all islets, 1-degree and 2-degree
         for d in 0..3 {
             let mut visited: FnvHashSet<usize> = FnvHashSet::with_capacity_and_hasher(
                 self.processed_graph.order(),
@@ -363,52 +364,6 @@ impl RuleBasedPreprocessor {
                 });
                 nb.insert(v);
                 self.lower_bound = max(self.lower_bound, nb.len() - 1);
-                self.stack.push(nb);
-            }
-        }
-    }
-
-    fn remove_low_fill_in(&mut self) {
-        // remove all low degree vertices
-        let mut visited: FnvHashSet<usize> =
-            FnvHashSet::with_capacity_and_hasher(self.processed_graph.order(), Default::default());
-        let mut queue = VecDeque::new();
-        self.processed_graph
-            .vertices()
-            .filter(|v| {
-                self.processed_graph.degree(*v) <= 3 || self.processed_graph.fill_in_count(*v) <= 1
-            })
-            .for_each(|v| {
-                visited.insert(v);
-                queue.push_back(v);
-            });
-
-        while let Some(v) = queue.pop_front() {
-            if !self.processed_graph.has_vertex(v) {
-                continue;
-            }
-            let cnt = self.processed_graph.fill_in_count(v);
-            visited.remove(&v);
-            let d = self.processed_graph.degree(v);
-            let mut eliminate =
-                cnt < 1 || (cnt == 1 && self.processed_graph.degree(v) < self.lower_bound);
-            if !eliminate {
-                eliminate =
-                    self.processed_graph.degree(v) == 3 && cnt <= 2 && self.lower_bound >= 3;
-            }
-            if eliminate {
-                let mut nb: FnvHashSet<_> = self.processed_graph.neighborhood(v).collect();
-                self.processed_graph.eliminate_vertex(v);
-                nb.iter().copied().for_each(|u| {
-                    if !visited.contains(&u) {
-                        queue.push_back(u);
-                        visited.insert(u);
-                    }
-                });
-                nb.insert(v);
-                if cnt < 1 {
-                    self.lower_bound = max(self.lower_bound, nb.len() - 1);
-                }
                 self.stack.push(nb);
             }
         }
@@ -471,29 +426,6 @@ impl SearchState {
             td.add_bag(self.graph.vertices().collect());
             return td;
         }
-        if self.separation_level == SeparationLevel::NotConnected {
-            let components: Vec<_> = self.graph.connected_components();
-            if components.len() > 1 {
-                println!("c found connected components");
-                let mut td = TreeDecomposition::new();
-                let id = td.add_bag(FnvHashSet::default());
-                for partial in components.iter().map(|cc| {
-                    let graph = self.graph.vertex_induced(&cc);
-                    let mut search_sate = SearchState {
-                        graph,
-                        separation_level: SeparationLevel::Connected,
-                        lower_bound: self.lower_bound.clone(),
-                        log_state: self.log_state.clone(),
-                    };
-                    search_sate.search()
-                }) {
-                    td.combine_with(id, partial);
-                }
-                return td;
-            } else {
-                self.separation_level = SeparationLevel::Connected;
-            }
-        }
         while self.separation_level != SeparationLevel::Atomic {
             if let Some(separator) = self.find_separator() {
                 println!("c found safe separator: {:?}", self.separation_level);
@@ -509,33 +441,32 @@ impl SearchState {
         log_state.increment(self.separation_level);
         self.log_state.set(log_state);
         //todo: add solver builder that returns a solver that is then called on the graph
-        /*let min_fill  = HeuristicDecomposer::new(self.graph.clone(), MinFillStrategy).decompose();
-        let min_degree  = HeuristicDecomposer::new(self.graph.clone(), MinDegreeStrategy).decompose();
+        /*let min_fill =
+            HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinFillStrategy)
+                .compute_upperbound();
+        let min_degree =
+            HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinDegreeStrategy)
+                .compute_upperbound();
         let upperbound = if min_fill.max_bag_size < min_degree.max_bag_size {
             min_fill
         } else {
             min_degree
         };
-        let mmw = minor_min_width(self.graph.borrow());
+        let mmw = MinorMinWidth::compute(self.graph.borrow());
         {
             let lb: &Cell<_> = self.lower_bound.borrow();
             lb.set(max(lb.get(), mmw));
             println!("c Atom has upperbound {}. Global lowerbound is {}", upperbound.max_bag_size-1, lb.get());
-            if lb.get() >= upperbound.max_bag_size - 1 {
-                return upperbound;
-            }
         }
-        let lower_bound = {
+        let lowerbound = {
             let tmp: &Cell<_> = self.lower_bound.borrow();
-            tmp.get() as u32
+            tmp.get()
         };
-        let mut solver = PID::with_bounds(self.graph.borrow(), lower_bound, (upperbound.max_bag_size - 1) as u32);
-        match solver.decompose() {
-            Ok(td) => { td }
-            Err(lowerbound) => {
-                assert_eq!(upperbound.max_bag_size-1, lowerbound as usize);
-                upperbound
-            }
+        let mut solver =
+            PID::with_bounds(self.graph.borrow(), lowerbound, upperbound.max_bag_size - 1);
+        match solver.compute_exact() {
+            Ok(td) => td,
+            Err(_) => upperbound,
         }*/
         let mut td = TreeDecomposition::new();
         td.add_bag(self.graph.vertices().collect());
@@ -544,7 +475,6 @@ impl SearchState {
 
     pub fn find_separator(&self) -> Option<FnvHashSet<usize>> {
         match self.separation_level {
-            SeparationLevel::NotConnected => Some(FnvHashSet::default()),
             SeparationLevel::Connected => self.graph.find_cut_vertex(),
             SeparationLevel::BiConnected => self.graph.find_safe_bi_connected_separator(),
             SeparationLevel::TriConnected => self.graph.find_safe_tri_connected_separator(),
@@ -573,7 +503,7 @@ impl SafeSeparatorFramework {
             log_state: log_state.clone(),
             search_state: SearchState {
                 graph,
-                separation_level: SeparationLevel::NotConnected,
+                separation_level: SeparationLevel::Connected,
                 lower_bound: lb,
                 log_state,
             },
@@ -582,6 +512,9 @@ impl SafeSeparatorFramework {
 
     pub fn compute(mut self) -> DecompositionResult {
         let mut td = self.search_state.search();
+        if let Err(e) = td.verify(&self.graph) {
+            println!("c ERROR: {}", e);
+        }
         let mut lb = { self.lower_bound.get() };
         let mut log_state = { self.log_state.get() };
 
@@ -607,7 +540,10 @@ impl SafeSeparatorFramework {
             });
         }
         if atom_states.is_empty() {
-            return DecompositionResult{tree_decomposition: td, decomposition_information: self.log_state.get()};
+            return DecompositionResult {
+                tree_decomposition: td,
+                decomposition_information: self.log_state.get(),
+            };
         }
         log_state.max_atom = atom_states.iter().map(|s| s.graph.order()).max().unwrap();
         self.log_state.set(log_state);
@@ -615,7 +551,7 @@ impl SafeSeparatorFramework {
             lb,
             atom_states
                 .iter()
-                .map(|s| MinorMinWidth::new(s.graph.clone()).compute())
+                .map(|s| MinorMinWidth::compute(&s.graph))
                 .max()
                 .unwrap(),
         );
@@ -624,9 +560,11 @@ impl SafeSeparatorFramework {
                 continue;
             }
             let min_fill =
-                HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinFillStrategy).compute_upperbound();
+                HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinFillStrategy)
+                    .compute_upperbound();
             let min_degree =
-                HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinDegreeStrategy).compute_upperbound();
+                HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinDegreeStrategy)
+                    .compute_upperbound();
             s.tree_decomposition = if min_fill.max_bag_size < min_degree.max_bag_size {
                 Some(min_fill)
             } else {
@@ -634,16 +572,24 @@ impl SafeSeparatorFramework {
             };
             let width = s.tree_decomposition.as_ref().unwrap().max_bag_size - 1;
             if width > lb {
-                let solver =  PID::with_bounds(&s.graph, lb as u32, width as u32);
-                if let Ok(atom_td) = solver.compute_exact()
-                {
+                let solver = PID::with_bounds(&s.graph, lb, width);
+                if let Ok(atom_td) = solver.compute_exact() {
                     s.tree_decomposition = Some(atom_td);
                     lb = max(s.tree_decomposition.as_ref().unwrap().max_bag_size - 1, lb);
                 };
             }
+            if let Err(e) = s.tree_decomposition.as_ref().unwrap().verify(&s.graph) {
+                println!("c ERROR: {}", e);
+            }
             td.replace_bag(s.target_bag, s.tree_decomposition.unwrap(), &s.graph);
         }
-        DecompositionResult{tree_decomposition: td, decomposition_information: self.log_state.get()}
+        if let Err(e) = td.verify(&self.graph) {
+            println!("c ERROR: {}", e);
+        }
+        DecompositionResult {
+            tree_decomposition: td,
+            decomposition_information: self.log_state.get(),
+        }
     }
 }
 
@@ -657,7 +603,6 @@ struct AtomState {
 #[derive(Default, Debug, Clone, Copy)]
 pub struct DecompositionInformation {
     n_separators: usize,
-    n_empty_separators: usize,
     n_cut_vertices: usize,
     n_degree_two_separators: usize,
     n_degree_three_separators: usize,
@@ -677,7 +622,6 @@ impl DecompositionInformation {
             }
         }
         match separation_level {
-            SeparationLevel::NotConnected => self.n_empty_separators += 1,
             SeparationLevel::Connected => self.n_cut_vertices += 1,
             SeparationLevel::BiConnected => self.n_degree_two_separators += 1,
             SeparationLevel::TriConnected => self.n_degree_three_separators += 1,

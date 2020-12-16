@@ -161,6 +161,14 @@ impl TreeDecomposition {
         &self.bags
     }
 
+    pub fn combine_with_or_replace(&mut self, glue_point: usize, mut other: TreeDecomposition) {
+        if self.bags.len() == 0 || (self.bags.len() == 1 && self.bags[0].vertex_set.is_empty()) {
+            *self = other;
+        } else {
+            self.combine_with(glue_point, other);
+        }
+    }
+
     pub fn combine_with(&mut self, glue_point: usize, mut other: TreeDecomposition) {
         assert!(glue_point < self.bags.len());
         self.max_bag_size = max(self.max_bag_size, other.max_bag_size);

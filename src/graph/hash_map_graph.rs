@@ -3,7 +3,8 @@ use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::upperbound::{
-    UpperboundHeuristic, HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillDegreeStrategy, MinFillStrategy,
+    HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillDegreeStrategy, MinFillStrategy,
+    UpperboundHeuristic,
 };
 use crate::util::EliminationOrder;
 use fnv::FnvHashMap;
@@ -158,11 +159,13 @@ impl HashMapGraph {
     }
 
     pub fn find_minor_safe_separator(&self) -> Option<FnvHashSet<usize>> {
-        let td = HeuristicEliminationOrderDecomposer::new(self.clone(), MinFillStrategy).compute_upperbound();
+        let td = HeuristicEliminationOrderDecomposer::new(self.clone(), MinFillStrategy)
+            .compute_upperbound();
         if let Some(separator) = self.minor_safe_helper(td, 25) {
             return Some(separator);
         }
-        let td = HeuristicEliminationOrderDecomposer::new(self.clone(), MinDegreeStrategy).compute_upperbound();
+        let td = HeuristicEliminationOrderDecomposer::new(self.clone(), MinDegreeStrategy)
+            .compute_upperbound();
         if let Some(separator) = self.minor_safe_helper(td, 25) {
             return Some(separator);
         }
@@ -713,17 +716,25 @@ impl Graph for HashMapGraph {
     }
 
     fn is_almost_simplicial(&self, u: usize) -> bool {
-        for ignore in self.data.get(&u).unwrap().iter() {
-            let nb: Vec<usize> = self.data.get(&u).unwrap().iter().copied().collect();
-            for (i, v) in nb.iter().enumerate() {
-                for w in nb.iter().skip(i + 1) {
-                    if v != ignore && self.has_edge(*v, *w) {
+        let mut check: Option<FnvHashSet<_>> = None;
+        let nb = self.data.get(&u).unwrap();
+        for v in nb.iter().copied() {
+            for w in nb
+                .iter()
+                .copied()
+                .filter(|w| v < *w && !self.has_edge(v, *w))
+            {
+                if check.is_some() {
+                    check.as_mut().unwrap().retain(|x| *x == v || *x == w);
+                    if check.as_ref().unwrap().is_empty() {
                         return false;
                     }
+                } else {
+                    check = Some([v, w].iter().copied().collect());
                 }
             }
         }
-        true
+        (check.is_none() && check.unwrap().len() == 1)
     }
 
     fn vertices(&self) -> Box<dyn Iterator<Item = usize> + '_> {

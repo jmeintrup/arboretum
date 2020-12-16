@@ -1,4 +1,5 @@
 use crate::datastructures::BitSet;
+use crate::exact::ExactSolver;
 use crate::graph::bag::Bag;
 use crate::graph::bag::TreeDecomposition;
 use crate::graph::bit_graph::*;
@@ -12,7 +13,6 @@ use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::Filter;
-use crate::exact::ExactSolver;
 use std::marker::PhantomData;
 
 type BlockCache = FnvHashMap<BitSet, Block>;
@@ -60,8 +60,8 @@ pub struct PID<G: Graph> {
     og_to_self: FnvHashMap<u32, u32>,
     self_to_og: Vec<u32>,
     graph: BitGraph,
-    target_width: u32,
-    upper_bound: u32,
+    target_width: usize,
+    upper_bound: usize,
 
     ready_queue: VecDeque<IBlock>,
     pending_endorsers: Vec<PMC>,
@@ -108,10 +108,10 @@ impl<G: Graph> PID<G> {
 
 impl<G: Graph> ExactSolver<G> for PID<G> {
     fn with_graph(og_graph: &G) -> Self {
-        Self::with_bounds(og_graph, 0, (og_graph.order()) as u32)
+        Self::with_bounds(og_graph, 0, og_graph.order())
     }
 
-    fn with_bounds(og_graph: &G, lowerbound: u32, upperbound: u32) -> Self {
+    fn with_bounds(og_graph: &G, lowerbound: usize, upperbound: usize) -> Self {
         let mut og_to_self = FnvHashMap::default();
         let mut self_to_og = Vec::with_capacity(og_graph.order());
 
@@ -154,11 +154,12 @@ impl<G: Graph> ExactSolver<G> for PID<G> {
             }
             return Ok(td);
         }
-        let mut o_block_sieve = LayeredSieve::new(self.graph.order() as u32, self.target_width);
+        let mut o_block_sieve =
+            LayeredSieve::new(self.graph.order() as u32, self.target_width as u32);
 
         while self.target_width < self.upper_bound {
             self.cache.o_block_cache = OBlockCache::default();
-            o_block_sieve = LayeredSieve::new(self.graph.order() as u32, self.target_width);
+            o_block_sieve = LayeredSieve::new(self.graph.order() as u32, self.target_width as u32);
             self.ready_queue = VecDeque::with_capacity(self.cache.i_block_cache.len());
 
             self.ready_queue = self.cache.i_block_cache.values().cloned().collect();
@@ -232,10 +233,6 @@ impl<G: Graph> ExactSolver<G> for PID<G> {
             }
             self.target_width += 1;
         }
-        println!(
-            "Err: target_width:{}, lower_bound:{}",
-            self.target_width, self.upper_bound
-        );
         Err(())
         /*let mut td = TreeDecomposition::new();
         let bag = (0..self.graph.order()).map(|i| { self.self_to_og[i] as usize }).collect();

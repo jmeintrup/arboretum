@@ -1,70 +1,85 @@
-/*use crate::graph::hash_map_graph::HashMapGraph;
-use crate::preprocessing::{RuleBasedPreprocessor, SafeSeparatorFramework, Preprocessor};
-use crate::upperbound::{HeuristicEliminationOrderDecomposer, UpperboundHeuristic};
-use crate::graph::mutable_graph::MutableGraph;
-use crate::graph::bag::TreeDecomposition;
+use crate::exact::pid::PID;
 use crate::exact::ExactSolver;
+use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
+use crate::graph::hash_map_graph::HashMapGraph;
 use crate::lowerbound::LowerboundHeuristic;
-use std::ops::Deref;
+use crate::preprocessing::{Preprocessor, RuleBasedPreprocessor, SafeSeparatorFramework};
+use crate::upperbound::UpperboundHeuristic;
 
-#[derive(Debug, Clone)]
-struct Atom {
-    graph: HashMapGraph,
-    target_bag: usize,
+pub struct SolverBuilder {
+    apply_reduction_rules: bool,
+    apply_safe_separator_decomposition: bool,
 }
 
-#[derive(Debug, Clone)]
-struct SolvedAtom {
-    atom: Atom,
-    tree_decomposition: TreeDecomposition,
-}
-
-impl SolvedAtom {
-    fn new(atom: Atom, tree_decomposition: TreeDecomposition) -> Self {
+impl SolverBuilder {
+    pub fn new() -> Self {
         Self {
-            atom,
-            tree_decomposition,
+            apply_reduction_rules: true,
+            apply_safe_separator_decomposition: true,
         }
     }
-}
 
-pub trait AtomSolver<G: Graph> {
-    fn compute(self, tree_decomposition: TreeDecomposition, atoms: &[Atom]) -> Vec<SolvedAtom>;
-}
+    pub fn reduction_rules(mut self, apply: bool) -> Self {
+        self.apply_reduction_rules = apply;
+        self
+    }
 
-pub trait PreprocessorBuilder {
-    fn build(graph: HashMapGraph) -> Box<dyn Preprocessor>;
-}
+    pub fn safe_separator_decomposition(mut self, apply: bool) -> Self {
+        self.apply_safe_separator_decomposition = apply;
+        self
+    }
 
-pub trait AtomSolverBuilder {
-    fn build(graph: HashMapGraph) -> Box<dyn AtomSolver<HashMapGraph>>;
-}
-
-pub trait UpperboundHeuristicBuilder {
-    fn build(graph: HashMapGraph) -> Box<dyn UpperboundHeuristic>;
-}
-
-pub trait LowerboundHeuristicBuilder {
-    fn build(graph: HashMapGraph) -> Box<dyn LowerboundHeuristic>;
+    pub fn build(self) -> Solver {
+        Solver {
+            apply_reduction_rules: self.apply_reduction_rules,
+            apply_safe_separator_decomposition: self.apply_safe_separator_decomposition,
+        }
+    }
 }
 
 pub struct Solver {
-    graph: HashMapGraph,
-    splitter: SafeSeparatorFramework,
-    preprocessor_builder: Box<dyn PreprocessorBuilder>,
-    atom_solver_builder: Box<dyn ExactSolverBuilder>,
+    apply_reduction_rules: bool,
+    apply_safe_separator_decomposition: bool,
 }
 
 impl Solver {
-    fn solve(mut self) -> TreeDecomposition {
-        let mut preprocessor: Box<dyn Preprocessor> = self.preprocessor_builder.build(self.graph);
-        preprocessor.preprocess();
-        let reduced_graph = preprocessor.graph();
-        if reduced_graph.order() == 0 {
-            return preprocessor.into_td();
+    pub fn solve(&self, graph: &HashMapGraph) -> TreeDecomposition {
+        let mut td = TreeDecomposition::new();
+        if graph.order() == 0 {
+            return td;
+        } else if graph.order() <= 2 {
+            td.add_bag(graph.vertices().collect());
+            return td;
+        } else {
+            let components = graph.connected_components();
+            if components.len() > 1 {
+                td.add_bag(Default::default());
+            }
+            for sub_graph in components.iter().map(|c| graph.vertex_induced(c)) {
+                if sub_graph.order() <= 2 {
+                    let idx = td.add_bag(sub_graph.vertices().collect());
+                    if td.bags.len() > 1 {
+                        td.add_edge(0, idx);
+                    }
+                } else {
+                    let mut reducer = RuleBasedPreprocessor::new(&sub_graph);
+                    reducer.preprocess();
+                    let reduced_graph = reducer.graph();
+                    if reduced_graph.order() == 0 {
+                        td.combine_with_or_replace(0, reducer.into_td())
+                    } else {
+                        let framework = SafeSeparatorFramework::new(reduced_graph.clone(), 4);
+                        let result = framework.compute();
+                        let partial_td = result.tree_decomposition;
+                        td.combine_with_or_replace(0, reducer.combine_into_td(partial_td));
+                    }
+                }
+                if let Err(e) = td.verify(&sub_graph) {
+                    println!("c SUBGRAPH ERROR: {}", e);
+                }
+            }
         }
-
+        td
     }
 }
-*/

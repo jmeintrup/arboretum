@@ -1,8 +1,8 @@
-use std::io::{BufRead, ErrorKind};
-use std::convert::TryFrom;
+use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::graph::graph::Graph;
+use std::convert::TryFrom;
+use std::io::{BufRead, ErrorKind};
 
 pub struct PaceReader<T: BufRead>(pub T);
 
@@ -25,25 +25,27 @@ impl<T: BufRead> TryFrom<PaceReader<T>> for HashMapGraph {
                     graph = Some(HashMapGraph::with_capacity(order.unwrap()));
                     (0..order.unwrap()).for_each(|v| graph.as_mut().unwrap().add_vertex(v));
                 }
-                _ => {
-                    match graph.as_mut() {
-                        Some(graph) => {
-                            let u = parse_vertex(elements[0], order.unwrap())?;
-                            let v = parse_vertex(elements[1], order.unwrap())?;
-                            graph.add_edge(u, v);
-                        },
-                        None => {
-                            return Err(std::io::Error::new(ErrorKind::Other, "Edges encountered before graph creation"));
-                        }
+                _ => match graph.as_mut() {
+                    Some(graph) => {
+                        let u = parse_vertex(elements[0], order.unwrap())?;
+                        let v = parse_vertex(elements[1], order.unwrap())?;
+                        graph.add_edge(u, v);
                     }
-                }
+                    None => {
+                        return Err(std::io::Error::new(
+                            ErrorKind::Other,
+                            "Edges encountered before graph creation",
+                        ));
+                    }
+                },
             };
         }
         match graph {
             Some(graph) => Ok(graph),
-            None => {
-                Err(std::io::Error::new(ErrorKind::Other, "No graph created during parsing"))
-            }
+            None => Err(std::io::Error::new(
+                ErrorKind::Other,
+                "No graph created during parsing",
+            )),
         }
     }
 }
@@ -59,13 +61,11 @@ fn parse_vertex(v: &str, order: usize) -> Result<usize, std::io::Error> {
             } else {
                 Ok(u - 1)
             }
-        },
-        Err(_) => {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Invalid vertex label",
-            ))
         }
+        Err(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid vertex label",
+        )),
     }
 }
 
@@ -74,15 +74,13 @@ fn parse_order(elements: &[&str]) -> Result<usize, std::io::Error> {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "Invalid line received starting with p",
-        ))
+        ));
     }
     match elements[2].parse::<usize>() {
         Ok(order) => Ok(order),
-        Err(_) => {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Invalid order of graph",
-            ))
-        }
+        Err(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid order of graph",
+        )),
     }
 }

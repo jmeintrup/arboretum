@@ -3,13 +3,26 @@ use arboretum::graph::graph::Graph;
 use arboretum::graph::hash_map_graph::HashMapGraph;
 use arboretum::io::PaceReader;
 use arboretum::preprocessing::{Preprocessor, RuleBasedPreprocessor, SafeSeparatorFramework};
+use arboretum::solver::{Solver, SolverBuilder};
+use fnv::FnvHashSet;
 use std::convert::TryFrom;
 use std::io;
 use std::io::stdin;
 use std::time::SystemTime;
-use fnv::FnvHashSet;
 
 fn main() -> io::Result<()> {
+    let graph: HashMapGraph = {
+        let buffer = stdin();
+        let reader = PaceReader(buffer.lock());
+        HashMapGraph::try_from(reader)?
+    };
+
+    let mut solver = SolverBuilder::new().build();
+    print_pace_td(&solver.solve(&graph), &graph);
+    Ok(())
+}
+
+/*fn main() -> io::Result<()> {
     let graph: HashMapGraph = {
         let buffer = stdin();
         let reader = PaceReader(buffer.lock());
@@ -65,7 +78,7 @@ fn main() -> io::Result<()> {
     }
     print_pace_td(&td, &graph);
     Ok(())
-}
+}*/
 
 pub fn print_pace_td<G: Graph>(td: &TreeDecomposition, graph: &G) {
     let bag_count: usize = td.bags.len();
@@ -85,6 +98,30 @@ pub fn print_pace_td<G: Graph>(td: &TreeDecomposition, graph: &G) {
     td.bags().iter().for_each(|b| {
         for child in b.neighbors.iter().copied().filter(|i| *i > b.id) {
             println!("{} {}", b.id + 1, child + 1);
+        }
+    });
+}
+
+pub fn print_graphviz<G: Graph>(td: &TreeDecomposition, graph: &G) {
+    let bag_count: usize = td.bags.len();
+    let max_bag: usize = td.max_bag_size;
+    td.bags().iter().for_each(|b| {
+        let mut tmp: Vec<_> = b.vertex_set.iter().copied().collect();
+        tmp.sort();
+        let vertices: Vec<_> = tmp.iter().map(|i| (i).to_string()).collect();
+        let mut init = String::new();
+        init.push_str(&format!(" [label=\"{}: ", b.id));
+        let mut vertices = vertices.iter().fold(init, |mut acc, v| {
+            acc.push_str(v.as_str());
+            acc.push_str(" ");
+            acc
+        });
+        vertices.push_str("\"]");
+        println!("b{} {}", b.id, vertices);
+    });
+    td.bags().iter().for_each(|b| {
+        for child in b.neighbors.iter().copied().filter(|i| *i > b.id) {
+            println!("b{} -- b{}", b.id, child);
         }
     });
 }
