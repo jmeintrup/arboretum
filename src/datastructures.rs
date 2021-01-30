@@ -8,6 +8,7 @@ use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 use std::ops::{AddAssign, Div, Index, IndexMut};
 use std::{fmt, iter};
+use fnv::FnvHashMap;
 
 #[derive(Clone, Default)]
 pub struct BitSet {
@@ -425,6 +426,112 @@ impl Index<usize> for BitSet {
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         self.bit_vec.index(index)
+    }
+}
+
+pub struct PQ {
+    heap: Vec<usize>,
+    values: FnvHashMap<usize, usize>,
+    indices: FnvHashMap<usize, usize>,
+}
+
+enum ChildType {
+    First,
+    Second,
+}
+
+impl PQ {
+    pub fn new() -> Self {
+        Self {
+            heap: Vec::default(),
+            values: FnvHashMap::default(),
+            indices: FnvHashMap::default(),
+        }
+    }
+
+    pub fn insert(&mut self, k: usize, v: usize) {
+        if self.values.contains_key(&k) {
+            self.update(k, v);
+        } else {
+            self.values.insert(k, v);
+            self.indices.insert(k, self.heap.len());
+            self.heap.push(k);
+            if self.heap.len() > 1 {
+                self.up(self.heap.len() - 1);
+            }
+        }
+    }
+
+    fn update(&mut self, k: usize, v: usize) {
+        *self.values.get_mut(&k) = v;
+        self.up(*self.indices.get(&k).unwrap());
+        self.down(*self.indices.get(&k).unwrap());
+    }
+
+    pub fn pop_min(&mut self) -> Option<usize> {
+        if !self.heap.is_empty() {
+            let v = self.heap[0];
+            self.heap[0] = *self.heap.last().unwrap();
+            *self.indices.get_mut(&0).unwrap() = 0;
+            self.heap.pop();
+            if self.heap.len() > 1 {
+                self.down(0);
+            }
+            return Some(v);
+        }
+        None
+    }
+
+    fn up(&mut self, idx: usize) {
+        let mut current = idx;
+        let value = self.heap[current];
+        let mut parent = self.parent(current);
+
+        while current > 0 && self.values.get(&value) < self.values.get(&self.heap[parent]) {
+            let i = self.heap[parent];
+            self.heap[current] = i;
+            *self.indices.get_mut(&i).unwrap() = current;
+            current = parent;
+            parent = self.parent(parent);
+        }
+    }
+
+    fn down(&mut self, idx: usize) {
+        let mut current = idx;
+        let value = self.heap[current];
+
+        while self.heap.len() > self.child(current, ChildType::First) {
+            let mut first = self.child(current, ChildType::First);
+            let mut second = self.child(current, ChildType::Second);
+            if second < self.heap.len() {
+                let v1 = self.values.get(&self.heap[second]).unwrap();
+                let v2 = self.values.get(&self.heap[first]).unwrap();
+                if v1 < v2 {
+                    first = second;
+                }
+            }
+            if self.values.get(&self.heap[first]) < self.values.get(&value) {
+                self.heap[current] = self.heap[first];
+                *self.indices.get_mut(&self.heap[current]).unwrap() = current;
+                current = first
+            } else {
+                break;
+            }
+        }
+        self.heap[current] = value;
+        *self.indices.get_mut(&value).unwrap() = current
+    }
+
+    fn parent(&self, idx: usize) -> usize {
+        (idx-1)/2
+    }
+
+    fn child(&self, idx: usize, child_type: ChildType) -> usize {
+        let off = match child_type {
+            ChildType::First => 1,
+            ChildType::Second => 1,
+        };
+        idx*2 + off
     }
 }
 
