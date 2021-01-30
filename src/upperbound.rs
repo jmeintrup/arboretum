@@ -273,34 +273,10 @@ impl From<HashMapGraph> for MinFillGraph{
 }
 
 impl MinFillGraph {
-    pub fn add_edge(&mut self, u: usize, v: usize) {
-        if self.graph.has_edge(u, v) {
-            return;
-        }
-        self.graph.add_edge(u, v);
-        self.graph.neighborhood_set(u).iter().copied().filter(|x| self.graph.has_edge(*x, v)).for_each(|x| {
-            *self.cache.get_mut(&x).unwrap() += 1;
-            *self.cache.get_mut(&u).unwrap() += 1;
-            *self.cache.get_mut(&v).unwrap() += 1;
-        })
-    }
-
     pub fn get_lowest(&self) -> usize {
         *self.cache.iter().min_by(|(_, a), (_, b)| {
             a.cmp(b)
         }).unwrap().1
-    }
-
-    pub fn remove_edge(&mut self, u: usize, v: usize) {
-        if !self.graph.has_edge(u, v) {
-            return;
-        }
-        self.graph.remove_edge(u, v);
-        self.graph.neighborhood_set(u).iter().copied().filter(|x| self.graph.has_edge(*x, v)).for_each(|x| {
-            *self.cache.get_mut(&x).unwrap() -= 1;
-            *self.cache.get_mut(&u).unwrap() -= 1;
-            *self.cache.get_mut(&v).unwrap() -= 1;
-        })
     }
 
     fn fill_in_count(&self, u: usize) -> usize {
@@ -310,8 +286,10 @@ impl MinFillGraph {
 
     fn eliminate_fill0(&mut self, u: usize) {
         let delta = self.graph.degree(u) - 1;
-        self.graph.neighborhood_set(u).iter().copied().for_each(|v| {
-            *self.cache.get_mut(&v).unwrap() -= delta;
+        let graph = &self.graph;
+        let cache = &mut self.cache;
+        graph.neighborhood_set(u).iter().copied().for_each(|v| {
+            *cache.get_mut(&v).unwrap() -= delta;
         });
         self.graph.remove_vertex(u);
     }
@@ -329,22 +307,19 @@ impl MinFillGraph {
     fn update_cache(&mut self, v: usize, close_neighborhood: CloseNeighborhood, disjoint_neighborhood: DisjointNeighborhood) {
         let mut tmp = FnvHashMap::default();
         for u in self.graph.neighborhood_set(v).iter().copied() {
-            if !disjoint_neighborhood.N_u.get(&u).unwrap().is_empty() {
-                let fill_in_count = if !disjoint_neighborhood.N_a.get(&u).unwrap().is_empty() {
-                    // case 1
-                    //int newFill = getFillInValue(u) + (N_a.get(u).size()-1)*N_u.get(u).size();
-                    let init = sqr_no_self_loop(disjoint_neighborhood.N_a.get(&u).unwrap().len()) + self.fill_in_count(u);
-                    let mut fill_in_count = disjoint_neighborhood.N_a.get(&u).unwrap().iter().fold(init, |init, w| {
-                        let a = disjoint_neighborhood.N_u.get(&u).unwrap();
-                        let b = disjoint_neighborhood.N_u.get(&w).unwrap();
+            if !disjoint_neighborhood.unaffected_neighbors.get(&u).unwrap().is_empty() {
+                let fill_in_count = if !disjoint_neighborhood.neighbors_to_be.get(&u).unwrap().is_empty() {
+                    let init = sqr_no_self_loop(disjoint_neighborhood.neighbors_to_be.get(&u).unwrap().len()) + self.fill_in_count(u);
+                    let mut fill_in_count = disjoint_neighborhood.neighbors_to_be.get(&u).unwrap().iter().fold(init, |init, w| {
+                        let a = disjoint_neighborhood.unaffected_neighbors.get(&u).unwrap();
+                        let b = disjoint_neighborhood.unaffected_neighbors.get(&w).unwrap();
                         let intersection_count = a.intersection(b).count();
                         init - intersection_count
                     });
-                    // Are there edges between nodes in N_e? They have to be considered as well!
-                    if !disjoint_neighborhood.N_e.get(&u).unwrap().is_empty() {
-                        let mut count = sqr_no_self_loop(disjoint_neighborhood.N_e.get(&u).unwrap().len())/2;
-                        for x in disjoint_neighborhood.N_e.get(&u).unwrap() {
-                            for y in disjoint_neighborhood.N_e.get(&u).unwrap().iter().filter(|y| x < *y) {
+                    if !disjoint_neighborhood.existing_neighbors.get(&u).unwrap().is_empty() {
+                        let mut count = sqr_no_self_loop(disjoint_neighborhood.existing_neighbors.get(&u).unwrap().len())/2;
+                        for x in disjoint_neighborhood.existing_neighbors.get(&u).unwrap() {
+                            for y in disjoint_neighborhood.existing_neighbors.get(&u).unwrap().iter().filter(|y| x < *y) {
                                 if self.graph.has_edge(*x, *y) {
                                     count -=1;
                                 }
@@ -353,12 +328,11 @@ impl MinFillGraph {
                         fill_in_count -= count;
                     }
                     fill_in_count
-                } else { //N_a empty
-                    // case 2
-                    let init = self.fill_in_count(u) - disjoint_neighborhood.N_u.get(&u).unwrap().len();
-                    disjoint_neighborhood.N_e.get(&u).unwrap().iter().fold(init, |init, w| {
-                        let a = disjoint_neighborhood.N_e.get(&u).unwrap();
-                        let b = disjoint_neighborhood.N_a.get(&w).unwrap();
+                } else {
+                    let init = self.fill_in_count(u) - disjoint_neighborhood.unaffected_neighbors.get(&u).unwrap().len();
+                    disjoint_neighborhood.existing_neighbors.get(&u).unwrap().iter().fold(init, |init, w| {
+                        let a = disjoint_neighborhood.existing_neighbors.get(&u).unwrap();
+                        let b = disjoint_neighborhood.neighbors_to_be.get(&w).unwrap();
                         let intersection_count = a.intersection(b).filter(|x| x > &w).count();
                         init - intersection_count
                     })
@@ -366,23 +340,22 @@ impl MinFillGraph {
                 let v = sqr_no_self_loop(disjoint_neighborhood.len())/2;
                 tmp.insert(u, v-fill_in_count);
             } else {
-                let len = disjoint_neighborhood.N_e.get(&u).len() + disjoint_neighborhood.N_a.get(&u).len();
+                let len = disjoint_neighborhood.existing_neighbors.get(&u).unwrap().len() + disjoint_neighborhood.neighbors_to_be.get(&u).unwrap().len();
                 let v = sqr_no_self_loop(len)/2;
-                tmp.insert(u, b);
+                tmp.insert(u, v);
             }
         }
 
         for u in close_neighborhood.distance_two {
-            let intersection: Vec<usize> = self.graph.neighborhood_set(v).intersection(self.graph.neighborhood_set(u)).collect();
+            let intersection: Vec<usize> = self.graph.neighborhood_set(v).intersection(self.graph.neighborhood_set(u)).copied().collect();
             let mut increment_by = 0;
             for x in intersection.iter().copied() {
                 increment_by += intersection.iter().copied().filter(|y| x < *y && !self.graph.has_edge(x, *y)).count();
             }
-            tmp.insert(u, self.cache.get(&u).unwrap() + increment_by)
+            tmp.insert(u, self.cache.get(&u).unwrap() + increment_by);
         }
         for (key, value) in tmp {
-            let entry = self.cache.get_mut(&key).unwrap();
-            *enty = value;
+            *self.cache.get_mut(&key).unwrap() = value;
         }
         self.graph.eliminate_vertex(v);
     }
@@ -393,46 +366,46 @@ const fn sqr_no_self_loop(i: usize) -> usize {
 }
 
 struct DisjointNeighborhood {
-    N_a: FnvHashMap<usize, FnvHashSet<usize>>,
-    N_e: FnvHashMap<usize, FnvHashSet<usize>>,
-    N_u: FnvHashMap<usize, FnvHashSet<usize>>,
+    neighbors_to_be: FnvHashMap<usize, FnvHashSet<usize>>,
+    existing_neighbors: FnvHashMap<usize, FnvHashSet<usize>>,
+    unaffected_neighbors: FnvHashMap<usize, FnvHashSet<usize>>,
 }
 
 impl DisjointNeighborhood {
     fn len(&self) -> usize {
-        self.N_e.len() + self.N_a.len() + self.N_u.len()
+        self.existing_neighbors.len() + self.neighbors_to_be.len() + self.unaffected_neighbors.len()
     }
 
     fn new(graph: &HashMapGraph, v: usize) -> Self {
         let capacity = graph.neighborhood_set(v).len();
-        let mut N_a = FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
-        let mut N_e = FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
-        let mut N_u = FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
+        let mut neighbors_to_be = FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
+        let mut existing_neighbors = FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
+        let mut unaffected_neighbors = FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
         graph.neighborhood_set(v).iter().copied().for_each(|u| {
-            N_a.insert(u, FnvHashSet::default());
-            N_e.insert(u, FnvHashSet::default());
-            N_u.insert(u, FnvHashSet::default());
+            neighbors_to_be.insert(u, FnvHashSet::default());
+            existing_neighbors.insert(u, FnvHashSet::default());
+            unaffected_neighbors.insert(u, FnvHashSet::default());
         });
 
         for u in graph.neighborhood_set(v).iter().copied() {
             for w in graph.neighborhood_set(u).iter().copied().filter(|w| u != *w) {
                 if graph.neighborhood_set(v).contains(&w) {
-                    N_e.get_mut(&u).unwrap().insert(w)
+                    existing_neighbors.get_mut(&u).unwrap().insert(w);
                 } else {
-                    N_u.get_mut(&u).unwrap().insert(w)
+                    unaffected_neighbors.get_mut(&u).unwrap().insert(w);
                 }
             }
             for u2 in graph.neighborhood_set(v).iter().copied() {
                 if u2 != u && !graph.has_edge(u, u2) {
-                    N_a.get_mut(&u).unwrap().insert(u2);
+                    neighbors_to_be.get_mut(&u).unwrap().insert(u2);
                 }
             }
         }
 
         Self {
-            N_a,
-            N_e,
-            N_u
+            neighbors_to_be,
+            existing_neighbors,
+            unaffected_neighbors
         }
     }
 }
@@ -450,7 +423,7 @@ impl CloseNeighborhood {
         for u in graph.neighborhood_set(v) {
             for w in graph.neighborhood_set(v).iter().filter(|w| u < *w) {
                 if !distance_one.contains(w) {
-                    distance_two.insert(*w)
+                    distance_two.insert(*w);
                 }
             }
         }

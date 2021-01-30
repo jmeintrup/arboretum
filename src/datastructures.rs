@@ -463,7 +463,7 @@ impl PQ {
     }
 
     fn update(&mut self, k: usize, v: usize) {
-        *self.values.get_mut(&k) = v;
+        *self.values.get_mut(&k).unwrap() = v;
         self.up(*self.indices.get(&k).unwrap());
         self.down(*self.indices.get(&k).unwrap());
     }
