@@ -1,7 +1,7 @@
 use crate::datastructures::BitSet;
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
-use fnv::FnvHashSet;
+use fnv::{FnvHashSet, FnvHashMap};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -49,6 +49,47 @@ impl TreeDecomposition {
             root: None,
             max_bag_size: 0,
         }
+    }
+
+    pub fn flatten(&mut self) {
+        while let Some((parent, child)) = self.find_combinable() {
+            let redundant_bag = self.remove_bag(child);
+            self.reroute(redundant_bag, parent);
+        }
+    }
+
+    fn reroute(&mut self, old_bag: Bag, parent_idx: usize) {
+        self.bags[parent_idx].neighbors.extend(old_bag.neighbors.iter().copied());
+        let old_id = old_bag.id;
+        for neighbor in old_bag.neighbors {
+            let idx = self.bags[neighbor].neighbors.iter_mut().find(|id| **id == old_id).unwrap();
+            *idx = parent_idx;
+        }
+    }
+
+    fn remove_bag(&mut self, id: usize) -> Bag {
+        let redundant_bag = self.bags.swap_remove(id);
+        let last_bag = self.bags.len();
+        if redundant_bag.id != last_bag {
+            self.bags[id].id = id;
+            let neighbors: Vec<_> = self.bags[id].neighbors.iter().copied().collect();
+            for neighbor in neighbors {
+                let idx = self.bags[neighbor].neighbors.iter_mut().find(|id| **id == last_bag).unwrap();
+                *idx = id;
+            }
+        }
+        redundant_bag
+    }
+
+    fn find_combinable(&self) -> Option<(usize, usize)> {
+        for b in &self.bags {
+            if let Some(n) = b.neighbors.iter().find(|n| {
+                self.bags[**n].vertex_set.is_subset(&b.vertex_set)
+            }) {
+                return Some((b.id, self.bags[*n].id))
+            }
+        }
+        None
     }
 
     pub fn add_bag(&mut self, vertex_set: FnvHashSet<usize>) -> usize {
@@ -105,6 +146,43 @@ impl TreeDecomposition {
             stack,
             visited,
         }
+    }
+
+    pub fn replace_bag_v2(
+        &mut self,
+        target_bag: usize,
+        mut td: TreeDecomposition,
+    ) {
+        let mut separators: FnvHashMap<usize, FnvHashSet<usize>> = FnvHashMap::default();
+        for neighbor in &self.bags[target_bag].neighbors {
+            let key = self.bags[*neighbor].id;
+            let value: FnvHashSet<_> = self.bags[target_bag].vertex_set.intersection(&self.bags[*neighbor].vertex_set).copied().collect();
+            separators.insert(key, value);
+        }
+        let offset = self.bags.len();
+
+        for bag in &mut td.bags {
+            bag.id+=offset;
+            for i in &mut bag.neighbors {
+                *i+=offset;
+            }
+        }
+
+        self.bags.reserve(td.bags.len());
+        for bag in td.bags {
+            self.bags.push(bag)
+        }
+
+        for (id, separator) in separators {
+            let new_neighbor = self.bags[offset..].iter_mut().find(|b| {
+                b.vertex_set.is_superset(&separator)
+            }).unwrap();
+
+            let idx = new_neighbor.neighbors.iter_mut().find(|i| **i == target_bag).unwrap();
+            *idx = new_neighbor.id;
+        }
+        self.bags.swap_remove(target_bag);
+        self.max_bag_size = self.bags.iter().map(|b| b.vertex_set.len()).max().unwrap();
     }
 
     pub fn replace_bag(

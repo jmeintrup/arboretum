@@ -431,7 +431,7 @@ impl Index<usize> for BitSet {
 
 pub struct PQ {
     heap: Vec<usize>,
-    values: FnvHashMap<usize, usize>,
+    values: FnvHashMap<usize, i64>,
     indices: FnvHashMap<usize, usize>,
 }
 
@@ -449,7 +449,16 @@ impl PQ {
         }
     }
 
-    pub fn insert(&mut self, k: usize, v: usize) {
+    pub fn remove(&mut self, k: usize) {
+        assert!(self.values.contains_key(&k));
+        if !k == 0 {
+            let v = *self.values.get(&self.heap[0]).unwrap() - 1;
+            self.insert(k, v);
+        }
+        self.pop_min();
+    }
+
+    pub fn insert(&mut self, k: usize, v: i64) {
         if self.values.contains_key(&k) {
             self.update(k, v);
         } else {
@@ -462,22 +471,23 @@ impl PQ {
         }
     }
 
-    fn update(&mut self, k: usize, v: usize) {
+    fn update(&mut self, k: usize, v: i64) {
         *self.values.get_mut(&k).unwrap() = v;
         self.up(*self.indices.get(&k).unwrap());
         self.down(*self.indices.get(&k).unwrap());
     }
 
-    pub fn pop_min(&mut self) -> Option<usize> {
+    pub fn pop_min(&mut self) -> Option<(usize, i64)> {
         if !self.heap.is_empty() {
-            let v = self.heap[0];
+            let k = self.heap[0];
+            let v = *self.values.get(&k).unwrap();
             self.heap[0] = *self.heap.last().unwrap();
             *self.indices.get_mut(&0).unwrap() = 0;
             self.heap.pop();
             if self.heap.len() > 1 {
                 self.down(0);
             }
-            return Some(v);
+            return Some((k, v));
         }
         None
     }

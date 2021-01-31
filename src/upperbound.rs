@@ -7,6 +7,7 @@ use fnv::{FnvHashMap, FnvHashSet};
 use rand::prelude::*;
 use std::cmp::max;
 use std::collections::HashMap;
+use crate::datastructures::PQ;
 
 pub trait UpperboundHeuristic {
     fn compute_upperbound(self) -> TreeDecomposition;
@@ -245,12 +246,12 @@ impl<G: Graph> SelectionStrategy<G> for MinFillDegreeStrategy {
     }
 }
 
-pub struct MinFillGraph {
+pub struct MinFillSelector {
     graph: HashMapGraph,
     cache: FnvHashMap<usize, usize>,
 }
 
-impl From<HashMapGraph> for MinFillGraph{
+impl From<HashMapGraph> for MinFillSelector {
     fn from(graph: HashMapGraph) -> Self {
         let mut cache = FnvHashMap::with_capacity_and_hasher(graph.order(), Default::default());
         for u in graph.vertices() {
@@ -272,18 +273,27 @@ impl From<HashMapGraph> for MinFillGraph{
     }
 }
 
-impl MinFillGraph {
-    pub fn get_lowest(&self) -> usize {
-        *self.cache.iter().min_by(|(_, a), (_, b)| {
-            a.cmp(b)
-        }).unwrap().1
+impl Selector for MinFillSelector {
+    fn graph(&self) -> &HashMapGraph {
+        &self.graph
     }
 
-    fn fill_in_count(&self, u: usize) -> usize {
-        let deg = self.graph.degree(u);
-        (deg * deg - deg)/2 - self.cache.get(&u).unwrap()
+    fn value(&self, v: usize) -> i64 {
+        self.fill_in_count(v) as i64
     }
 
+    fn eliminate_vertex(&mut self, v: usize) {
+        if self.fill_in_count(v) == 0 {
+            self.eliminate_fill0(v);
+        } else {
+            let mut close_neighborhood = CloseNeighborhood::new(&self.graph, v);
+            let mut disjoint_neighborhood = DisjointNeighborhood::new(&self.graph, v);
+            self.update_cache(v, close_neighborhood, disjoint_neighborhood);
+        }
+    }
+}
+
+impl MinFillSelector {
     fn eliminate_fill0(&mut self, u: usize) {
         let delta = self.graph.degree(u) - 1;
         let graph = &self.graph;
@@ -294,14 +304,9 @@ impl MinFillGraph {
         self.graph.remove_vertex(u);
     }
 
-    pub fn eliminate(&mut self, v: usize) {
-        if self.fill_in_count(v) == 0 {
-            self.eliminate_fill0(v);
-        } else {
-            let mut close_neighborhood = CloseNeighborhood::new(&self.graph, v);
-            let mut disjoint_neighborhood = DisjointNeighborhood::new(&self.graph, v);
-            self.update_cache(v, close_neighborhood, disjoint_neighborhood);
-        }
+    fn fill_in_count(&self, u: usize) -> usize {
+        let deg = self.graph.degree(u);
+        (deg * deg - deg) / 2 - self.cache.get(&u).unwrap()
     }
 
     fn update_cache(&mut self, v: usize, close_neighborhood: CloseNeighborhood, disjoint_neighborhood: DisjointNeighborhood) {
@@ -432,4 +437,105 @@ impl CloseNeighborhood {
             distance_two
         }
     }
+}
+
+pub enum SelectorType {
+    MinFill,
+}
+
+struct SelectionManager {}
+
+impl SelectionManager {
+    fn build(selector_type: SelectorType, graph: HashMapGraph) -> Box<dyn Selector> {
+        return match selector_type {
+            SelectorType::MinFill => {
+                Box::new(MinFillSelector::from(graph))
+            }
+        }
+    }
+}
+
+trait Selector {
+    fn graph(&self) -> &HashMapGraph;
+    fn value(&self, v: usize) -> i64;
+    fn eliminate_vertex(&mut self, v: usize);
+}
+
+pub fn heuristic_elimination_decompose(graph: HashMapGraph, selector_type: SelectorType) -> TreeDecomposition {
+    let mut tree_decomposition = TreeDecomposition::new();
+    if graph.order() <= 2 {
+        tree_decomposition.add_bag(graph.vertices().collect());
+        return tree_decomposition;
+    }
+    let mut max_bag = 2;
+    let mut selection_manager = SelectionManager::build(selector_type, graph);
+    let mut pq = PQ::new();
+
+    let mut bags: FnvHashMap<usize, FnvHashSet<usize>> = FnvHashMap::default();
+    let mut eliminated_at: FnvHashMap<usize, usize> = FnvHashMap::default();
+    
+    for v in selection_manager.graph().vertices() {
+        pq.insert(v, selection_manager.value(v))
+    }
+
+    let mut stack: Vec<usize> = vec![];
+    while let Some((u, value)) = pq.pop_min()  {
+        if selection_manager.graph().order() <= max_bag {
+            break;
+        }
+
+        let mut nb: FnvHashSet<usize> = selection_manager.graph().neighborhood(u).collect();
+        max_bag = max(max_bag, nb.len() + 1);
+        stack.push(u);
+        bags.insert(u, nb.clone());
+        eliminated_at.insert(u, stack.len() - 1);
+        selection_manager.eliminate_vertex(u);
+        
+        let tmp: Vec<_> = nb.iter().copied().filter(|u| {
+            selection_manager.graph().neighborhood_set(*u).len() < nb.len()
+        }).collect();
+        
+        // eliminate directly, as these are subsets of the current bag
+        for u in tmp {
+            selection_manager.eliminate_vertex(u);
+            nb.remove(&u);
+            pq.remove(u);
+        }
+        for u in nb {
+            pq.insert(u, selection_manager.value(u));
+        }
+    }
+
+    if selection_manager.graph().order() > 0 {
+        let mut rest: FnvHashSet<usize> = selection_manager.graph().vertices().collect();
+        let u = rest.iter().next().copied().unwrap();
+        rest.remove(&u);
+        bags.insert(u, rest);
+        stack.push(u);
+        eliminated_at.insert(u, stack.len() - 1);
+    }
+
+    for v in stack.iter().rev() {
+        let mut nb = bags.remove(v).unwrap();
+        let old_bag_id = match tree_decomposition
+            .bags
+            .iter()
+            .find(|old_bag| old_bag.vertex_set.is_superset(&nb))
+        {
+            Some(old_bag) => Some(old_bag.id),
+            None => None,
+        };
+        match old_bag_id {
+            Some(old_bag_id) => {
+                nb.insert(*v);
+                let id = tree_decomposition.add_bag(nb);
+                tree_decomposition.add_edge(old_bag_id, id);
+            }
+            None => {
+                nb.insert(*v);
+                tree_decomposition.add_bag(nb);
+            }
+        }
+    }
+    tree_decomposition
 }

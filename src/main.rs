@@ -2,13 +2,10 @@ use arboretum::graph::bag::TreeDecomposition;
 use arboretum::graph::graph::Graph;
 use arboretum::graph::hash_map_graph::HashMapGraph;
 use arboretum::io::PaceReader;
-use arboretum::preprocessing::{Preprocessor, RuleBasedPreprocessor, SafeSeparatorFramework};
-use arboretum::solver::{Solver, SolverBuilder};
-use fnv::FnvHashSet;
+use arboretum::solver::{SolverBuilder};
 use std::convert::TryFrom;
 use std::io;
 use std::io::stdin;
-use std::time::SystemTime;
 
 fn main() -> io::Result<()> {
     let graph: HashMapGraph = {
@@ -17,7 +14,7 @@ fn main() -> io::Result<()> {
         HashMapGraph::try_from(reader)?
     };
 
-    let mut solver = SolverBuilder::new().build();
+    let solver = SolverBuilder::new().build();
     print_pace_td(&solver.solve(&graph), &graph);
     Ok(())
 }
