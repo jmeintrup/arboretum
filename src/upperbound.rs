@@ -259,7 +259,7 @@ impl From<HashMapGraph> for MinFillSelector {
         }
         for u in graph.vertices() {
             for v in graph.vertices().filter(|v| u < *v && graph.has_edge(u, *v)) {
-                graph.neighborhood_set(u).iter().copied().filter(|x| graph.has_edge(*x, v)).for_each(|x| {
+                graph.neighborhood_set(u).iter().copied().filter(|x|  v < *x && graph.has_edge(*x, v)).for_each(|x| {
                     *cache.get_mut(&x).unwrap() += 1;
                     *cache.get_mut(&u).unwrap() += 1;
                     *cache.get_mut(&v).unwrap() += 1;
@@ -286,21 +286,71 @@ impl Selector for MinFillSelector {
         if self.fill_in_count(v) == 0 {
             self.eliminate_fill0(v);
         } else {
-            let mut close_neighborhood = CloseNeighborhood::new(&self.graph, v);
-            let mut disjoint_neighborhood = DisjointNeighborhood::new(&self.graph, v);
-            self.update_cache(v, close_neighborhood, disjoint_neighborhood);
+            let mut to_add: Vec<(usize, usize)> = vec![];
+            for u in self.graph.neighborhood_set(v) {
+                for w in self.graph.neighborhood_set(v).iter().filter(|w| u < *w && !self.graph.has_edge(*u, **w)) {
+                    to_add.push((*u, *w));
+                }
+            }
+            for (u, w) in to_add {
+                self.add_edge(u, w);
+            }
+            self.remove_vertex(v);
         }
     }
 }
 
 impl MinFillSelector {
+    fn add_edge(&mut self, u: usize, v: usize) {
+        self.graph.add_edge(u, v);
+        for x in self.graph.neighborhood_set(u) {
+            if self.graph.has_edge(*x, v) {
+                *self.cache.get_mut(x).unwrap() += 1;
+                *self.cache.get_mut(&u).unwrap() += 1;
+                *self.cache.get_mut(&v).unwrap() += 1;
+            }
+        }
+    }
+
+    fn remove_vertex(&mut self, u: usize) {
+        for v in self.graph.neighborhood_set(u).clone() {
+            self.remove_edge(u, v);
+        }
+        self.graph.remove_vertex(u);
+        self.cache.remove(&u);
+    }
+
+    fn remove_edge(&mut self, u: usize, v: usize) {
+        self.graph.remove_edge(u, v);
+
+        for x in self.graph.neighborhood_set(u) {
+            if self.graph.has_edge(*x, v) {
+                *self.cache.get_mut(&x).unwrap() -= 1;
+                *self.cache.get_mut(&u).unwrap() -= 1;
+                *self.cache.get_mut(&v).unwrap() -= 1;
+            }
+        }
+    }
+
+    fn eliminate_vertex_v2(&mut self, v: usize) {
+        if self.fill_in_count(v) == 0 {
+            self.eliminate_fill0(v);
+        } else {
+            let mut close_neighborhood = CloseNeighborhood::new(&self.graph, v);
+            let mut disjoint_neighborhood = DisjointNeighborhood::new(&self.graph, v);
+            self.update_cache(v, close_neighborhood, disjoint_neighborhood);
+        }
+    }
+
     fn eliminate_fill0(&mut self, u: usize) {
-        let delta = self.graph.degree(u) - 1;
-        let graph = &self.graph;
-        let cache = &mut self.cache;
-        graph.neighborhood_set(u).iter().copied().for_each(|v| {
-            *cache.get_mut(&v).unwrap() -= delta;
-        });
+        if self.graph.degree(u) > 1 {
+            let delta = self.graph.degree(u) - 1;
+            let graph = &self.graph;
+            let cache = &mut self.cache;
+            graph.neighborhood_set(u).iter().copied().for_each(|v| {
+                *cache.get_mut(&v).unwrap() -= delta;
+            });
+        }
         self.graph.remove_vertex(u);
     }
 
@@ -538,4 +588,83 @@ pub fn heuristic_elimination_decompose(graph: HashMapGraph, selector_type: Selec
         }
     }
     tree_decomposition
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::upperbound::{MinFillSelector, Selector};
+    use crate::graph::hash_map_graph::HashMapGraph;
+    use std::path::PathBuf;
+    use std::io::prelude::*;
+    use std::io::BufReader;
+    use std::fs::File;
+    use crate::io::PaceReader;
+    use std::convert::TryFrom;
+    use fnv::FnvHashMap;
+    use crate::graph::graph::Graph;
+    use crate::graph::mutable_graph::MutableGraph;
+
+
+    #[test]
+    fn initial() {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("tests");
+        d.push("td-validate");
+        d.push("test");
+        d.push("tw-solver-bugs");
+        d.push("dimacs_anna.gr");
+
+        let f = File::open(d).unwrap();
+        let mut reader = BufReader::new(f);
+        let reader = PaceReader(reader);
+        let graph = HashMapGraph::try_from(reader).unwrap();
+
+        let vertices: Vec<_> = graph.vertices().collect();
+        let fc1: FnvHashMap<_, _> = vertices.iter().map(|v| (*v, graph.fill_in_count(*v) as i64)).collect();
+
+        let selector = MinFillSelector::from(graph);
+        let fc2: FnvHashMap<_, _> = vertices.iter().map(|v| (*v, selector.value(*v))).collect();
+
+        for v in fc1.keys() {
+            assert_eq!(fc1.get(v).unwrap(), fc2.get(v).unwrap());
+        }
+    }
+
+    #[test]
+    fn eliminate() {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("tests");
+        d.push("td-validate");
+        d.push("test");
+        d.push("tw-solver-bugs");
+        d.push("dimacs_anna.gr");
+
+        let f = File::open(d).unwrap();
+        let mut reader = BufReader::new(f);
+        let reader = PaceReader(reader);
+        let mut graph = HashMapGraph::try_from(reader).unwrap();
+        let mut selector = MinFillSelector::from(graph.clone());
+
+        let mut vertices: Vec<_> = graph.vertices().collect();
+
+        while let Some(v) = vertices.pop() {
+            println!("Eliminating :{}", v);
+            graph.eliminate_vertex(v);
+            selector.eliminate_vertex(v);
+
+            let mut a: Vec<_> = selector.graph.vertices().collect();
+            a.sort();
+            let mut b: Vec<_> = graph.vertices().collect();
+            b.sort();
+            println!("Checking equality!");
+            assert_eq!(a, b);
+            println!("This worked!");
+            let fc1: FnvHashMap<_, _> = vertices.iter().map(|v| (*v, graph.fill_in_count(*v) as i64)).collect();
+            let fc2: FnvHashMap<_, _> = vertices.iter().map(|v| (*v, selector.value(*v))).collect();
+
+            for v in fc1.keys() {
+                assert_eq!(fc1.get(v).unwrap(), fc2.get(v).unwrap());
+            }
+        }
+    }
 }
