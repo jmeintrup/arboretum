@@ -429,7 +429,7 @@ impl Index<usize> for BitSet {
     }
 }
 
-pub struct PQ {
+pub struct BinaryQueue {
     heap: Vec<usize>,
     values: FnvHashMap<usize, i64>,
     indices: FnvHashMap<usize, usize>,
@@ -440,12 +440,20 @@ enum ChildType {
     Second,
 }
 
-impl PQ {
+impl BinaryQueue {
     pub fn new() -> Self {
         Self {
             heap: Vec::default(),
             values: FnvHashMap::default(),
             indices: FnvHashMap::default(),
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            heap: Vec::with_capacity(capacity),
+            values: FnvHashMap::with_capacity_and_hasher(capacity, Default::default()),
+            indices: FnvHashMap::with_capacity_and_hasher(capacity, Default::default()),
         }
     }
 
@@ -458,13 +466,13 @@ impl PQ {
         self.pop_min();
     }
 
-    pub fn insert(&mut self, k: usize, v: i64) {
-        if self.values.contains_key(&k) {
-            self.update(k, v);
+    pub fn insert(&mut self, element: usize, priority: i64) {
+        if self.values.contains_key(&element) {
+            self.update(element, priority);
         } else {
-            self.values.insert(k, v);
-            self.indices.insert(k, self.heap.len());
-            self.heap.push(k);
+            self.values.insert(element, priority);
+            self.indices.insert(element, self.heap.len());
+            self.heap.push(element);
             if self.heap.len() > 1 {
                 self.up(self.heap.len() - 1);
             }
@@ -482,7 +490,7 @@ impl PQ {
             let k = self.heap[0];
             let v = *self.values.get(&k).unwrap();
             self.heap[0] = *self.heap.last().unwrap();
-            *self.indices.get_mut(&0).unwrap() = 0;
+            *self.indices.get_mut(&self.heap[0]).unwrap() = 0;
             self.heap.pop();
             if self.heap.len() > 1 {
                 self.down(0);
@@ -492,28 +500,31 @@ impl PQ {
         None
     }
 
-    fn up(&mut self, idx: usize) {
-        let mut current = idx;
-        let value = self.heap[current];
-        let mut parent = self.parent(current);
+    fn up(&mut self, mut idx: usize) {
+        let x = self.heap[idx];
+        let mut parent = self.parent(idx);
 
-        while current > 0 && self.values.get(&value) < self.values.get(&self.heap[parent]) {
-            let i = self.heap[parent];
-            self.heap[current] = i;
-            *self.indices.get_mut(&i).unwrap() = current;
-            current = parent;
-            parent = self.parent(parent);
+        loop {
+            if parent.is_some() && idx > 0 && self.values.get(&x) < self.values.get(&self.heap[parent.unwrap()]) {
+                let p = parent.unwrap();
+                self.heap[idx] = self.heap[p];
+                self.indices.insert(self.heap[p], idx);
+                idx = p;
+                parent = self.parent(idx);
+            } else {
+                break;
+            }
         }
+        self.heap[idx] = x;
+        self.indices.insert(x, idx);
     }
 
     fn down(&mut self, idx: usize) {
         let mut current = idx;
         let value = self.heap[current];
 
-        while self.heap.len() > self.child(current, ChildType::First) {
-            let mut first = self.child(current, ChildType::First);
-            let mut second = self.child(current, ChildType::Second);
-            if second < self.heap.len() {
+        while let Some(mut first) = self.child(current, ChildType::First) {
+            if let Some(second) = self.child(current, ChildType::Second) {
                 let v1 = self.values.get(&self.heap[second]).unwrap();
                 let v2 = self.values.get(&self.heap[first]).unwrap();
                 if v1 < v2 {
@@ -532,22 +543,31 @@ impl PQ {
         *self.indices.get_mut(&value).unwrap() = current
     }
 
-    fn parent(&self, idx: usize) -> usize {
-        (idx-1)/2
+    fn parent(&self, idx: usize) -> Option<usize> {
+        return if idx == 0 {
+            None
+        } else {
+            Some((idx - 1) / 2)
+        }
     }
 
-    fn child(&self, idx: usize, child_type: ChildType) -> usize {
+    fn child(&self, idx: usize, child_type: ChildType) -> Option<usize> {
         let off = match child_type {
             ChildType::First => 1,
-            ChildType::Second => 1,
+            ChildType::Second => 2,
         };
-        idx*2 + off
+        let idx = idx*2 + off;
+        return if idx >= self.heap.len() {
+            None
+        } else {
+            Some(idx)
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::datastructures::BitSet;
+    use crate::datastructures::{BitSet, BinaryQueue};
 
     #[test]
     fn iter() {
@@ -568,5 +588,34 @@ mod tests {
             v = bs.get_next_set(v.unwrap() + 1);
         }
         assert_eq!(a, c);
+    }
+
+    #[test]
+    fn pq_pop_min() {
+        let mut pq = BinaryQueue::new();
+
+        pq.insert(0, 10);
+        pq.insert(16, 1);
+        pq.insert(1, 15);
+
+        assert_eq!(pq.pop_min(), Some((16, 1)));
+        assert_eq!(pq.pop_min(), Some((0, 10)));
+        assert_eq!(pq.pop_min(), Some((1, 15)));
+        assert_eq!(pq.pop_min(), None);
+    }
+
+    #[test]
+    fn pq_update() {
+        let mut pq = BinaryQueue::new();
+
+        pq.insert(0, 10);
+        pq.insert(16, 1);
+        pq.insert(1, 15);
+        pq.insert(16, 11);
+
+        assert_eq!(pq.pop_min(), Some((0, 10)));
+        assert_eq!(pq.pop_min(), Some((16, 11)));
+        assert_eq!(pq.pop_min(), Some((1, 15)));
+        assert_eq!(pq.pop_min(), None);
     }
 }

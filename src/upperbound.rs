@@ -7,7 +7,7 @@ use fnv::{FnvHashMap, FnvHashSet};
 use rand::prelude::*;
 use std::cmp::max;
 use std::collections::HashMap;
-use crate::datastructures::PQ;
+use crate::datastructures::BinaryQueue;
 
 pub trait UpperboundHeuristic {
     fn compute_upperbound(self) -> TreeDecomposition;
@@ -469,7 +469,7 @@ pub fn heuristic_elimination_decompose(graph: HashMapGraph, selector_type: Selec
     }
     let mut max_bag = 2;
     let mut selection_manager = SelectionManager::build(selector_type, graph);
-    let mut pq = PQ::new();
+    let mut pq = BinaryQueue::new();
 
     let mut bags: FnvHashMap<usize, FnvHashSet<usize>> = FnvHashMap::default();
     let mut eliminated_at: FnvHashMap<usize, usize> = FnvHashMap::default();
@@ -479,7 +479,7 @@ pub fn heuristic_elimination_decompose(graph: HashMapGraph, selector_type: Selec
     }
 
     let mut stack: Vec<usize> = vec![];
-    while let Some((u, value)) = pq.pop_min()  {
+    while let Some((u, _)) = pq.pop_min()  {
         if selection_manager.graph().order() <= max_bag {
             break;
         }
