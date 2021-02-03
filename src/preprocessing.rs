@@ -456,7 +456,11 @@ impl SearchState {
         {
             let lb: &Cell<_> = self.lower_bound.borrow();
             lb.set(max(lb.get(), mmw));
-            println!("c Atom has upperbound {}. Global lowerbound is {}", upperbound.max_bag_size-1, lb.get());
+            println!(
+                "c Atom has upperbound {}. Global lowerbound is {}",
+                upperbound.max_bag_size - 1,
+                lb.get()
+            );
         }
         let lowerbound = {
             let tmp: &Cell<_> = self.lower_bound.borrow();

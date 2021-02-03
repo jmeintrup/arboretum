@@ -2,7 +2,7 @@ use arboretum::graph::bag::TreeDecomposition;
 use arboretum::graph::graph::Graph;
 use arboretum::graph::hash_map_graph::HashMapGraph;
 use arboretum::io::PaceReader;
-use arboretum::solver::{SolverBuilder};
+use arboretum::solver::SolverBuilder;
 use std::convert::TryFrom;
 use std::io;
 use std::io::stdin;

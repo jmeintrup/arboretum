@@ -1,5 +1,6 @@
 use bitvec::prelude::*;
 use core::mem;
+use fnv::FnvHashMap;
 use num::{Integer, Num, NumCast, ToPrimitive};
 use std::cmp::Ordering;
 use std::convert::TryInto;
@@ -8,7 +9,6 @@ use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 use std::ops::{AddAssign, Div, Index, IndexMut};
 use std::{fmt, iter};
-use fnv::FnvHashMap;
 
 #[derive(Clone, Default)]
 pub struct BitSet {
@@ -505,7 +505,10 @@ impl BinaryQueue {
         let mut parent = self.parent(idx);
 
         loop {
-            if parent.is_some() && idx > 0 && self.values.get(&x) < self.values.get(&self.heap[parent.unwrap()]) {
+            if parent.is_some()
+                && idx > 0
+                && self.values.get(&x) < self.values.get(&self.heap[parent.unwrap()])
+            {
                 let p = parent.unwrap();
                 self.heap[idx] = self.heap[p];
                 self.indices.insert(self.heap[p], idx);
@@ -544,11 +547,7 @@ impl BinaryQueue {
     }
 
     fn parent(&self, idx: usize) -> Option<usize> {
-        return if idx == 0 {
-            None
-        } else {
-            Some((idx - 1) / 2)
-        }
+        return if idx == 0 { None } else { Some((idx - 1) / 2) };
     }
 
     fn child(&self, idx: usize, child_type: ChildType) -> Option<usize> {
@@ -556,18 +555,18 @@ impl BinaryQueue {
             ChildType::First => 1,
             ChildType::Second => 2,
         };
-        let idx = idx*2 + off;
+        let idx = idx * 2 + off;
         return if idx >= self.heap.len() {
             None
         } else {
             Some(idx)
-        }
+        };
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::datastructures::{BitSet, BinaryQueue};
+    use crate::datastructures::{BinaryQueue, BitSet};
 
     #[test]
     fn iter() {
