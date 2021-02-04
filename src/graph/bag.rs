@@ -52,43 +52,87 @@ impl TreeDecomposition {
     }
 
     pub fn flatten(&mut self) {
+        println!("c pre flatten size: {}", self.bags.len());
         while let Some((parent, child)) = self.find_combinable() {
-            let redundant_bag = self.remove_bag(child);
-            self.reroute(redundant_bag, parent);
+            println!("c flatten... verifying at loop start");
+            for bag in &self.bags {
+                assert!(!bag.neighbors.contains(&bag.id));
+                for neighbor in &bag.neighbors {
+                    assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
+                }
+            }
+            self.reroute(child, parent);
+            self.remove_bag(child);
         }
+        println!("c post flatten size: {}", self.bags.len());
     }
 
-    fn reroute(&mut self, old_bag: Bag, parent_idx: usize) {
-        self.bags[parent_idx]
-            .neighbors
-            .extend(old_bag.neighbors.iter().copied());
-        let old_id = old_bag.id;
-        for neighbor in old_bag.neighbors {
-            let idx = self.bags[neighbor]
-                .neighbors
-                .iter_mut()
-                .find(|id| **id == old_id)
-                .unwrap();
-            *idx = parent_idx;
-        }
-    }
+    fn reroute(&mut self, old_bag: usize, parent_idx: usize) {
+        println!("c rerouting from {} to {}", old_bag, parent_idx);
+        let old_neighbors = self.bags[old_bag].neighbors.clone();
 
-    fn remove_bag(&mut self, id: usize) -> Bag {
-        let redundant_bag = self.bags.swap_remove(id);
-        let last_bag = self.bags.len();
-        if redundant_bag.id != last_bag {
-            self.bags[id].id = id;
-            let neighbors: Vec<_> = self.bags[id].neighbors.iter().copied().collect();
-            for neighbor in neighbors {
-                let idx = self.bags[neighbor]
-                    .neighbors
-                    .iter_mut()
-                    .find(|id| **id == last_bag)
-                    .unwrap();
-                *idx = id;
+        println!("c Pre assertion:");
+        for bag in &self.bags {
+            assert!(!bag.neighbors.contains(&bag.id));
+            for neighbor in &bag.neighbors {
+                assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
             }
         }
-        redundant_bag
+        println!("c pre reroute assertions hold");
+        self.bags[parent_idx].neighbors.extend(old_neighbors.iter());
+        self.bags[parent_idx].neighbors.remove(&parent_idx);
+        self.bags[parent_idx].neighbors.remove(&old_bag);
+
+        let old_id =  self.bags[old_bag].id;
+        for neighbor_idx in old_neighbors {
+            if neighbor_idx == parent_idx {
+                continue;
+            }
+            assert!(!self.bags[neighbor_idx].neighbors.contains(&parent_idx));
+
+            assert_eq!(self.bags[neighbor_idx].neighbors.remove(&old_id), true);
+            assert_eq!(self.bags[neighbor_idx].neighbors.insert(parent_idx), true);
+        }
+
+        self.bags[old_bag].neighbors.clear();
+
+        assert!(!self.bags[parent_idx].neighbors.contains(&parent_idx));
+
+        println!("c post reroute assertions:");
+        for bag in self.bags.iter().filter(|b| b.id != old_bag) {
+            assert!(!bag.neighbors.contains(&bag.id));
+            for neighbor in &bag.neighbors {
+                assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
+            }
+        }
+        println!("c post reroute assertions hold");
+    }
+
+    fn remove_bag(&mut self, id: usize) {
+        assert!(self.bags[id].neighbors.is_empty());
+        if id == self.bags.len() - 1 {
+            println!("c Only need to pop!");
+            self.bags.pop();
+        } else {
+            println!("c Pre swap {} {:?}", id, self.bags[id]);
+            let old_last = self.bags.swap_remove(id);
+            println!("c Post swap {} {:?}", id, self.bags[id]);
+            assert!(old_last.neighbors.is_empty());
+            self.bags[id].id = id;
+            let old_last = self.bags.len();
+            for neighbor in self.bags[id].neighbors.clone() {
+                println!("c Neighbor {} {:?}", neighbor, self.bags[neighbor]);
+                assert_eq!(self.bags[neighbor].neighbors.remove(&old_last), true);
+                assert_eq!(self.bags[neighbor].neighbors.insert(id), true);
+            }
+        }
+        println!("c Post removal assertions:");
+        for bag in &self.bags {
+            assert!(!bag.neighbors.contains(&bag.id));
+            for neighbor in &bag.neighbors {
+                assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
+            }
+        }
     }
 
     fn find_combinable(&self) -> Option<(usize, usize)> {
@@ -113,7 +157,7 @@ impl TreeDecomposition {
         self.bags.push(Bag {
             id,
             vertex_set,
-            neighbors: Vec::new(),
+            neighbors: FnvHashSet::default(),
         });
         id
     }
@@ -137,12 +181,8 @@ impl TreeDecomposition {
         assert!(b1 < self.bags.len());
         assert!(b2 < self.bags.len());
         assert_ne!(b1, b2);
-        if self.bags[b1].neighbors.iter().find(|b| **b == b2).is_none()
-            && self.bags[b2].neighbors.iter().find(|b| **b == b1).is_none()
-        {
-            self.bags[b1].neighbors.push(b2);
-            self.bags[b2].neighbors.push(b1);
-        }
+        self.bags[b1].neighbors.insert(b2);
+        self.bags[b2].neighbors.insert(b1);
     }
 
     pub fn dfs(&self) -> TreeDecompositionIterator {
@@ -175,9 +215,7 @@ impl TreeDecomposition {
 
         for bag in &mut td.bags {
             bag.id += offset;
-            for i in &mut bag.neighbors {
-                *i += offset;
-            }
+            bag.neighbors = bag.neighbors.iter().map(|i| *i + offset).collect();
         }
 
         self.bags.reserve(td.bags.len());
@@ -191,12 +229,8 @@ impl TreeDecomposition {
                 .find(|b| b.vertex_set.is_superset(&separator))
                 .unwrap();
 
-            let idx = new_neighbor
-                .neighbors
-                .iter_mut()
-                .find(|i| **i == target_bag)
-                .unwrap();
-            *idx = new_neighbor.id;
+            assert_eq!(new_neighbor.neighbors.remove(&target_bag), true);
+            assert_eq!(new_neighbor.neighbors.insert(new_neighbor.id), true);
         }
         self.bags.swap_remove(target_bag);
         self.max_bag_size = self.bags.iter().map(|b| b.vertex_set.len()).max().unwrap();
@@ -213,7 +247,7 @@ impl TreeDecomposition {
         let offset = self.bags.len();
         td.bags.iter_mut().for_each(|b| {
             b.id += offset;
-            b.neighbors.iter_mut().for_each(|i| *i += offset);
+            b.neighbors = b.neighbors.iter().map(|i| *i + offset).collect();
         });
         for neighbor_of_target_bag in neighbors_of_target_bag {
             let mut neighbor_of_target_bag = &mut self.bags[neighbor_of_target_bag];
@@ -228,25 +262,18 @@ impl TreeDecomposition {
                 .unwrap();
             new_neighbor_of_neighbor_of_target_bag
                 .neighbors
-                .push(neighbor_of_target_bag.id);
-            let neighborhood_idx = neighbor_of_target_bag
-                .neighbors
-                .iter_mut()
-                .find(|i| **i == target_bag)
-                .unwrap();
-            *neighborhood_idx = new_neighbor_of_neighbor_of_target_bag.id;
+                .insert(neighbor_of_target_bag.id);
+
+            assert_eq!(neighbor_of_target_bag.neighbors.remove(&target_bag), true);
+            assert_eq!(neighbor_of_target_bag.neighbors.insert(new_neighbor_of_neighbor_of_target_bag.id), true);
         }
         self.bags.extend_from_slice(&td.bags);
         let old_idx = self.bags.len() - 1;
         self.bags.swap(target_bag, old_idx);
         self.bags[target_bag].id = target_bag;
         for id in self.bags[target_bag].neighbors.clone() {
-            let idx = self.bags[id]
-                .neighbors
-                .iter_mut()
-                .find(|i| **i == old_idx)
-                .unwrap();
-            *idx = target_bag;
+            assert_eq!(self.bags[id].neighbors.remove(&old_idx), true);
+            assert_eq!(self.bags[id].neighbors.insert(target_bag), true);
         }
         self.bags.swap_remove(old_idx);
         self.max_bag_size = self.bags.iter().map(|b| b.vertex_set.len()).max().unwrap();
@@ -270,15 +297,15 @@ impl TreeDecomposition {
         let offset = self.bags.len();
         for mut b in other.bags.iter_mut() {
             b.id += offset;
-            b.neighbors.iter_mut().for_each(|n| *n += offset);
+            b.neighbors = b.neighbors.iter().map(|n| *n + offset).collect();
         }
         let other_glue_point = other
             .bags
             .iter_mut()
             .find(|b| b.vertex_set.is_superset(&self.bags[glue_point].vertex_set))
             .unwrap();
-        other_glue_point.neighbors.push(glue_point);
-        self.bags[glue_point].neighbors.push(other_glue_point.id);
+        other_glue_point.neighbors.insert(glue_point);
+        self.bags[glue_point].neighbors.insert(other_glue_point.id);
         self.bags.extend(other.bags.drain(..));
     }
 
@@ -428,5 +455,5 @@ impl<'a> Iterator for TreeDecompositionIterator<'a> {
 pub struct Bag {
     pub id: usize,
     pub vertex_set: FnvHashSet<usize>,
-    pub neighbors: Vec<usize>,
+    pub neighbors: FnvHashSet<usize>,
 }

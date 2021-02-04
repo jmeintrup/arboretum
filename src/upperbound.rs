@@ -573,9 +573,7 @@ pub trait Selector: From<HashMapGraph> {
     fn eliminate_vertex(&mut self, v: usize);
 }
 
-pub fn heuristic_elimination_decompose<S: Selector>(
-    graph: HashMapGraph,
-) -> TreeDecomposition {
+pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> TreeDecomposition {
     let mut tree_decomposition = TreeDecomposition::new();
     if graph.order() <= 2 {
         tree_decomposition.add_bag(graph.vertices().collect());
@@ -612,11 +610,11 @@ pub fn heuristic_elimination_decompose<S: Selector>(
             .collect();
 
         // eliminate directly, as these are subsets of the current bag
-        for u in tmp {
+        /*for u in tmp {
             selector.eliminate_vertex(u);
             nb.remove(&u);
             pq.remove(u);
-        }
+        }*/
         for u in nb {
             pq.insert(u, selector.value(u));
         }
@@ -662,7 +660,7 @@ mod tests {
     use crate::graph::hash_map_graph::HashMapGraph;
     use crate::graph::mutable_graph::MutableGraph;
     use crate::io::PaceReader;
-    use crate::upperbound::{MinFillSelector, Selector, DistanceTwoNeighbors};
+    use crate::upperbound::{DistanceTwoNeighbors, MinFillSelector, Selector};
     use fnv::FnvHashMap;
     use std::convert::TryFrom;
     use std::fs::File;
