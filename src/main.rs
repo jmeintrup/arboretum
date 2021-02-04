@@ -13,7 +13,7 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "arboretum-cli",
-    about = "Computed Tree Decompositions for a given input graph."
+    about = "Computes Tree Decompositions for a given input graph."
 )]
 struct Opt {
     /// Input file, using the graph format of the PACE 2021 challenge.

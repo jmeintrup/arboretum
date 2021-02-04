@@ -54,7 +54,7 @@ impl TreeDecomposition {
     pub fn flatten(&mut self) {
         println!("c pre flatten size: {}", self.bags.len());
         while let Some((parent, child)) = self.find_combinable() {
-            println!("c flatten... verifying at loop start");
+            //println!("c flatten... verifying at loop start");
             for bag in &self.bags {
                 assert!(!bag.neighbors.contains(&bag.id));
                 for neighbor in &bag.neighbors {
@@ -68,17 +68,17 @@ impl TreeDecomposition {
     }
 
     fn reroute(&mut self, old_bag: usize, parent_idx: usize) {
-        println!("c rerouting from {} to {}", old_bag, parent_idx);
+        //println!("c rerouting from {} to {}", old_bag, parent_idx);
         let old_neighbors = self.bags[old_bag].neighbors.clone();
 
-        println!("c Pre assertion:");
+        //println!("c Pre assertion:");
         for bag in &self.bags {
             assert!(!bag.neighbors.contains(&bag.id));
             for neighbor in &bag.neighbors {
                 assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
             }
         }
-        println!("c pre reroute assertions hold");
+        //println!("c pre reroute assertions hold");
         self.bags[parent_idx].neighbors.extend(old_neighbors.iter());
         self.bags[parent_idx].neighbors.remove(&parent_idx);
         self.bags[parent_idx].neighbors.remove(&old_bag);
@@ -98,35 +98,35 @@ impl TreeDecomposition {
 
         assert!(!self.bags[parent_idx].neighbors.contains(&parent_idx));
 
-        println!("c post reroute assertions:");
+        //println!("c post reroute assertions:");
         for bag in self.bags.iter().filter(|b| b.id != old_bag) {
             assert!(!bag.neighbors.contains(&bag.id));
             for neighbor in &bag.neighbors {
                 assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
             }
         }
-        println!("c post reroute assertions hold");
+        //println!("c post reroute assertions hold");
     }
 
     fn remove_bag(&mut self, id: usize) {
         assert!(self.bags[id].neighbors.is_empty());
         if id == self.bags.len() - 1 {
-            println!("c Only need to pop!");
+            //println!("c Only need to pop!");
             self.bags.pop();
         } else {
-            println!("c Pre swap {} {:?}", id, self.bags[id]);
+            //println!("c Pre swap {} {:?}", id, self.bags[id]);
             let old_last = self.bags.swap_remove(id);
-            println!("c Post swap {} {:?}", id, self.bags[id]);
+            //println!("c Post swap {} {:?}", id, self.bags[id]);
             assert!(old_last.neighbors.is_empty());
             self.bags[id].id = id;
             let old_last = self.bags.len();
             for neighbor in self.bags[id].neighbors.clone() {
-                println!("c Neighbor {} {:?}", neighbor, self.bags[neighbor]);
+                //println!("c Neighbor {} {:?}", neighbor, self.bags[neighbor]);
                 assert_eq!(self.bags[neighbor].neighbors.remove(&old_last), true);
                 assert_eq!(self.bags[neighbor].neighbors.insert(id), true);
             }
         }
-        println!("c Post removal assertions:");
+        //println!("c Post removal assertions:");
         for bag in &self.bags {
             assert!(!bag.neighbors.contains(&bag.id));
             for neighbor in &bag.neighbors {
@@ -239,8 +239,7 @@ impl TreeDecomposition {
     pub fn replace_bag(
         &mut self,
         target_bag: usize,
-        mut td: TreeDecomposition,
-        subgraph: &HashMapGraph,
+        mut td: TreeDecomposition
     ) {
         let neighbors_of_target_bag = self.bags[target_bag].neighbors.clone();
         let vertices_of_target_bag = self.bags[target_bag].vertex_set.clone();

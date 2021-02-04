@@ -87,34 +87,21 @@ impl Solver {
                     } else {
                         let framework = SafeSeparatorFramework::new(reduced_graph.clone(), 4);
                         let result = framework.compute();
-                        let partial_td = result.tree_decomposition;
-                        td.combine_with_or_replace(0, reducer.combine_into_td(partial_td));
+                        let mut partial_td = result.tree_decomposition;
+                        partial_td.flatten();
+                        td.combine_with_or_replace(0, reducer.combine_into_td(partial_td, &sub_graph));
                     }
                 } else {
-                    let mut partial_td = heuristic_elimination_decompose::<MinFillSelector>(sub_graph.clone());
-                    assert!(partial_td.verify(&sub_graph).is_ok());
-                    partial_td.flatten();
-                    assert!(partial_td.verify(&sub_graph).is_ok());
-                    td.combine_with_or_replace(0, partial_td);
-
-                    /*let mut reducer = RuleBasedPreprocessor::new(&sub_graph);
+                    let mut reducer = RuleBasedPreprocessor::new(&sub_graph);
                     reducer.preprocess();
                     let reduced_graph = reducer.graph();
                     if reduced_graph.order() == 0 {
                         td.combine_with_or_replace(0, reducer.into_td())
                     } else {
                         let mut partial_td = heuristic_elimination_decompose::<MinFillSelector>(sub_graph.clone());
-                        assert!(partial_td.verify(&sub_graph).is_ok());
                         partial_td.flatten();
-                        assert!(partial_td.verify(&sub_graph).is_ok());
-                        /*let partial_td = HeuristicEliminationOrderDecomposer::new(
-                            sub_graph.clone(),
-                            MinFillStrategy,
-                        )
-                        .compute_upperbound();*/
-                        assert!(partial_td.verify(&sub_graph).is_ok());
-                        td.combine_with_or_replace(0, reducer.combine_into_td(partial_td));
-                    }*/
+                        td.combine_with_or_replace(0, reducer.combine_into_td(partial_td, &sub_graph));
+                    }
                 }
             }
         }
