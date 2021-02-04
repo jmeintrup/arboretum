@@ -615,15 +615,9 @@ impl MutableGraph for HashMapGraph {
         assert_ne!(u, v);
         if let Some(x) = self.data.get_mut(&u) {
             x.remove(&v);
-            if x.len() == 0 {
-                self.data.remove(&u);
-            }
         }
         if let Some(x) = self.data.get_mut(&v) {
             x.remove(&u);
-            if x.len() == 0 {
-                self.data.remove(&v);
-            }
         }
     }
 
@@ -707,7 +701,6 @@ impl Graph for HashMapGraph {
     }
 
     fn has_edge(&self, u: usize, v: usize) -> bool {
-        assert_ne!(u, v);
         self.data.get(&u).unwrap().contains(&v)
     }
 
@@ -748,9 +741,9 @@ impl Graph for HashMapGraph {
 
     fn fill_in_count(&self, u: usize) -> usize {
         let mut count = 0;
-        for u in self.data.get(&u).unwrap().iter() {
-            for v in self.data.get(&u).unwrap().iter() {
-                if u < v && !self.has_edge(*u, *v) {
+        for x in self.neighborhood_set(u) {
+            for y in self.neighborhood_set(u) {
+                if x < y && !self.has_edge(*x, *y) {
                     count += 1;
                 }
             }
