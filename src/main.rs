@@ -2,23 +2,58 @@ use arboretum::graph::bag::TreeDecomposition;
 use arboretum::graph::graph::Graph;
 use arboretum::graph::hash_map_graph::HashMapGraph;
 use arboretum::io::PaceReader;
-use arboretum::preprocessing::{Preprocessor, RuleBasedPreprocessor, SafeSeparatorFramework};
-use arboretum::solver::{Solver, SolverBuilder};
-use fnv::FnvHashSet;
+use arboretum::solver::SolverBuilder;
 use std::convert::TryFrom;
+use std::fs::File;
 use std::io;
-use std::io::stdin;
-use std::time::SystemTime;
+use std::io::{stdin, BufReader};
+use std::path::PathBuf;
+use structopt::StructOpt;
+
+#[derive(Debug, StructOpt)]
+#[structopt(
+    name = "arboretum-cli",
+    about = "Computes Tree Decompositions for a given input graph."
+)]
+struct Opt {
+    /// Input file, using the graph format of the PACE 2021 challenge.
+    /// `stdin` if not specified.
+    #[structopt(parse(from_os_str))]
+    input: Option<PathBuf>,
+
+    /// Output file. `stdout` if not specified.
+    #[structopt(parse(from_os_str))]
+    output: Option<PathBuf>,
+
+    /// Mode. Heuristic or Exact. Defaults to exact.
+    // short and long flags (-d, --debug) will be deduced from the field's name
+    #[structopt(short, long)]
+    heuristic: bool,
+}
 
 fn main() -> io::Result<()> {
-    let graph: HashMapGraph = {
-        let buffer = stdin();
-        let reader = PaceReader(buffer.lock());
-        HashMapGraph::try_from(reader)?
+    let opt = Opt::from_args();
+
+    let graph: HashMapGraph = match opt.input {
+        Some(path) => {
+            let file = File::open(path)?;
+            let reader = PaceReader(BufReader::new(file));
+            HashMapGraph::try_from(reader)?
+        }
+        None => {
+            let stdin = stdin();
+            let reader = PaceReader(stdin.lock());
+            HashMapGraph::try_from(reader)?
+        }
     };
 
-    let mut solver = SolverBuilder::new().build();
-    print_pace_td(&solver.solve(&graph), &graph);
+    if opt.heuristic {
+        let solver = SolverBuilder::heuristic().build();
+        print_pace_td(&solver.solve(&graph), &graph);
+    } else {
+        let solver = SolverBuilder::new().build();
+        print_pace_td(&solver.solve(&graph), &graph);
+    }
     Ok(())
 }
 

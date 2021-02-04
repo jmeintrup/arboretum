@@ -19,7 +19,7 @@ use std::rc::Rc;
 pub trait Preprocessor {
     fn preprocess(&mut self);
 
-    fn combine_into_td(self, td: TreeDecomposition) -> TreeDecomposition;
+    fn combine_into_td(self, td: TreeDecomposition, graph: &HashMapGraph) -> TreeDecomposition;
 
     fn into_td(self) -> TreeDecomposition;
 
@@ -99,9 +99,26 @@ impl Preprocessor for RuleBasedPreprocessor {
         }
     }
 
-    fn combine_into_td(mut self, mut td: TreeDecomposition) -> TreeDecomposition {
-        self.partial_tree_decomposition = td;
+    fn combine_into_td(mut self, mut td: TreeDecomposition, graph: &HashMapGraph) -> TreeDecomposition {
+        //println!("c Combining");
+        //self.partial_tree_decomposition = td;
+        let mut vertices = FnvHashSet::default();
+        for bag in &td.bags {
+            vertices.extend(bag.vertex_set.iter().copied())
+        }
+        let tmp = self.stack.clone();
+        self.stack.push(vertices);
         self.process_stack();
+        assert!(self.partial_tree_decomposition.verify(graph).is_ok());
+        //self.partial_tree_decomposition.flatten();
+        /*for bag in &self.partial_tree_decomposition.bags {
+            println!("c id: {} len: {} lb: {}", bag.id, bag.vertex_set.len(), self.lower_bound)
+        }*/
+        self.partial_tree_decomposition.flatten();
+        self.partial_tree_decomposition.replace_bag(0, td);
+        /*self.stack = tmp;
+        self.partial_tree_decomposition = td;
+        self.process_stack();*/
         self.partial_tree_decomposition
     }
 
@@ -456,7 +473,11 @@ impl SearchState {
         {
             let lb: &Cell<_> = self.lower_bound.borrow();
             lb.set(max(lb.get(), mmw));
-            println!("c Atom has upperbound {}. Global lowerbound is {}", upperbound.max_bag_size-1, lb.get());
+            println!(
+                "c Atom has upperbound {}. Global lowerbound is {}",
+                upperbound.max_bag_size - 1,
+                lb.get()
+            );
         }
         let lowerbound = {
             let tmp: &Cell<_> = self.lower_bound.borrow();
