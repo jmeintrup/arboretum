@@ -10,7 +10,7 @@ once the first version is released on [crates.io](https://crates.io/) The first 
 
 # Features
 
-* Well known fast heuristics such as min-degree and min-fill and a higher quality randomized with lookahead [[1]](#1)[[2]](#1)
+* Well known fast heuristics such as min-degree and min-fill [[1]](#1)
 * Metaheuristics such as tabu-local search and genetic algorithms [[3]](#3) and a novel algorithm based on the idea of artificial bee colony 
 * Minor-min-width lowerbound heuristic [[4]](#4)
 * Rule-based preprocessing for reducing graphs and obtaining tree-decompositions of graphs of treewidth ≤ 3 [[5]](#5)
