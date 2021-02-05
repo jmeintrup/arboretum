@@ -313,9 +313,13 @@ impl BitSet {
         let mut block_idx = idx / block_size();
         let mut word_idx = idx % block_size();
         let mut block = self.bit_vec.as_slice()[block_idx];
+        let max = self.bit_vec.as_slice().len();
         block &= usize::MAX << word_idx;
         while block == 0usize {
             block_idx += 1;
+            if block_idx >= max {
+                return None;
+            }
             block = self.bit_vec.as_slice()[block_idx];
         }
         let v = block_idx * block_size() + block.trailing_zeros() as usize;
@@ -570,9 +574,9 @@ mod tests {
 
     #[test]
     fn iter() {
-        let mut bs = BitSet::new(129);
+        let mut bs = BitSet::new(256);
 
-        let a: Vec<usize> = vec![12, 63, 128];
+        let a: Vec<usize> = (0..256).filter(|i| i % 2 == 0).collect();
         for i in &a {
             bs.set_bit(*i);
         }
