@@ -2,7 +2,7 @@ use crate::datastructures::BitSet;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::graph::tree_decomposition::TreeDecomposition;
-use crate::heuristic_elimination_order::{heuristic_elimination_decompose, MinFillSelector};
+use crate::heuristic_elimination_order::{heuristic_elimination_decompose, MinFillSelector, MinDegreeSelector, Selector};
 use crate::util::EliminationOrder;
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
@@ -162,22 +162,31 @@ impl HashMapGraph {
         None
     }
 
+    fn no_match_minor_helper(&self, max_tries: u32) -> Option<MinorSafeResult> {
+        let mut new_td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
+        new_td.flatten();
+        if let Some(result) = self.minor_safe_helper(new_td, max_tries) {
+            Some(result)
+        } else {
+            let mut new_td = heuristic_elimination_decompose::<MinDegreeSelector>(self.clone());
+            new_td.flatten();
+            return self.minor_safe_helper(new_td, max_tries);
+        }
+    }
+
     pub fn find_minor_safe_separator(
         &self,
         tree_decomposition: Option<TreeDecomposition>,
     ) -> Option<MinorSafeResult> {
+        let max_tries = 25;
         return match tree_decomposition {
             None => {
-                let mut new_td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
-                new_td.flatten();
-                self.minor_safe_helper(new_td, 25)
+                self.no_match_minor_helper(max_tries)
             }
             Some(working_td) => {
-                match self.minor_safe_helper(working_td, 25) {
+                match self.minor_safe_helper(working_td, max_tries) {
                     None => {
-                        let mut new_td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
-                        new_td.flatten();
-                        self.minor_safe_helper(new_td, 25)
+                        self.no_match_minor_helper(max_tries)
                     }
                     Some(result) => {
                         Some(result)
@@ -185,15 +194,6 @@ impl HashMapGraph {
                 }
             }
         }
-        /*let mut working_td = match tree_decomposition {
-            None => {
-                let mut td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
-                td.flatten();
-                td
-            },
-            Some(tree_decomposition) => tree_decomposition,
-        };
-        self.minor_safe_helper(working_td, 25)*/
     }
 
     fn minor_safe_helper(&self, td: TreeDecomposition, max_tries: u32) -> Option<MinorSafeResult> {

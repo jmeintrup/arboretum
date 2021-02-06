@@ -451,6 +451,11 @@ impl SearchState {
                 .graph
                 .find_minor_safe_separator(self.upperbound_td.clone())
             {
+                println!("c found safe separator: {:?}", self.separation_level);
+                let mut log_state = self.log_state.get();
+                log_state.increment(self.separation_level);
+                self.log_state.set(log_state);
+
                 let mut heuristic_td = result.tree_decomposition;
 
                 let separator = result.separator;
