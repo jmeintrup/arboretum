@@ -2,10 +2,7 @@ use crate::datastructures::BitSet;
 use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::upperbound::{
-    HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillDegreeStrategy, MinFillStrategy,
-    UpperboundHeuristic,
-};
+use crate::upperbound::{HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillDegreeStrategy, MinFillStrategy, UpperboundHeuristic, heuristic_elimination_decompose, MinFillSelector};
 use crate::util::EliminationOrder;
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
@@ -159,14 +156,7 @@ impl HashMapGraph {
     }
 
     pub fn find_minor_safe_separator(&self) -> Option<FnvHashSet<usize>> {
-        let td = HeuristicEliminationOrderDecomposer::new(self.clone(), MinFillStrategy)
-            .compute_upperbound();
-        if let Some(separator) = self.minor_safe_helper(td, 25) {
-            return Some(separator);
-        }
-        let td = HeuristicEliminationOrderDecomposer::new(self.clone(), MinDegreeStrategy)
-            .compute_upperbound();
-        if let Some(separator) = self.minor_safe_helper(td, 25) {
+        if let Some(separator) = self.minor_safe_helper(heuristic_elimination_decompose::<MinFillSelector>(self.clone()), 25) {
             return Some(separator);
         }
         None
