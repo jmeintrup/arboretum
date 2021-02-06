@@ -83,7 +83,7 @@ impl TreeDecomposition {
         self.bags[parent_idx].neighbors.remove(&parent_idx);
         self.bags[parent_idx].neighbors.remove(&old_bag);
 
-        let old_id =  self.bags[old_bag].id;
+        let old_id = self.bags[old_bag].id;
         for neighbor_idx in old_neighbors {
             if neighbor_idx == parent_idx {
                 continue;
@@ -236,11 +236,7 @@ impl TreeDecomposition {
         self.max_bag_size = self.bags.iter().map(|b| b.vertex_set.len()).max().unwrap();
     }
 
-    pub fn replace_bag(
-        &mut self,
-        target_bag: usize,
-        mut td: TreeDecomposition
-    ) {
+    pub fn replace_bag(&mut self, target_bag: usize, mut td: TreeDecomposition) {
         let neighbors_of_target_bag = self.bags[target_bag].neighbors.clone();
         let vertices_of_target_bag = self.bags[target_bag].vertex_set.clone();
         let offset = self.bags.len();
@@ -264,7 +260,12 @@ impl TreeDecomposition {
                 .insert(neighbor_of_target_bag.id);
 
             assert_eq!(neighbor_of_target_bag.neighbors.remove(&target_bag), true);
-            assert_eq!(neighbor_of_target_bag.neighbors.insert(new_neighbor_of_neighbor_of_target_bag.id), true);
+            assert_eq!(
+                neighbor_of_target_bag
+                    .neighbors
+                    .insert(new_neighbor_of_neighbor_of_target_bag.id),
+                true
+            );
         }
         self.bags.extend_from_slice(&td.bags);
         let old_idx = self.bags.len() - 1;

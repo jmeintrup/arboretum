@@ -89,7 +89,10 @@ impl Solver {
                         let result = framework.compute();
                         let mut partial_td = result.tree_decomposition;
                         partial_td.flatten();
-                        td.combine_with_or_replace(0, reducer.combine_into_td(partial_td, &sub_graph));
+                        td.combine_with_or_replace(
+                            0,
+                            reducer.combine_into_td(partial_td, &sub_graph),
+                        );
                     }
                 } else {
                     let mut reducer = RuleBasedPreprocessor::new(&sub_graph);
@@ -98,9 +101,13 @@ impl Solver {
                     if reduced_graph.order() == 0 {
                         td.combine_with_or_replace(0, reducer.into_td())
                     } else {
-                        let mut partial_td = heuristic_elimination_decompose::<MinFillSelector>(sub_graph.clone());
+                        let mut partial_td =
+                            heuristic_elimination_decompose::<MinFillSelector>(sub_graph.clone());
                         partial_td.flatten();
-                        td.combine_with_or_replace(0, reducer.combine_into_td(partial_td, &sub_graph));
+                        td.combine_with_or_replace(
+                            0,
+                            reducer.combine_into_td(partial_td, &sub_graph),
+                        );
                     }
                 }
             }

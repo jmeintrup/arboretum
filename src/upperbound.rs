@@ -246,6 +246,56 @@ impl<G: Graph> SelectionStrategy<G> for MinFillDegreeStrategy {
     }
 }
 
+pub struct MinFillDegreeSelector {
+    inner: MinFillSelector,
+}
+
+impl From<HashMapGraph> for MinFillDegreeSelector {
+    fn from(graph: HashMapGraph) -> Self {
+        Self {
+            inner: MinFillSelector::from(graph),
+        }
+    }
+}
+
+impl Selector for MinFillDegreeSelector {
+    fn graph(&self) -> &HashMapGraph {
+        self.inner.graph()
+    }
+
+    fn value(&self, v: usize) -> i64 {
+        self.inner.value(v) << 32 + (self.inner.graph.degree(v) as i64)
+    }
+
+    fn eliminate_vertex(&mut self, v: usize) {
+        self.inner.eliminate_vertex(v);
+    }
+}
+
+pub struct MinDegreeSelector {
+    graph: HashMapGraph,
+}
+
+impl From<HashMapGraph> for MinDegreeSelector {
+    fn from(graph: HashMapGraph) -> Self {
+        Self { graph }
+    }
+}
+
+impl Selector for MinDegreeSelector {
+    fn graph(&self) -> &HashMapGraph {
+        &self.graph
+    }
+
+    fn value(&self, v: usize) -> i64 {
+        self.graph.degree(v) as i64
+    }
+
+    fn eliminate_vertex(&mut self, v: usize) {
+        self.graph.eliminate_vertex(v);
+    }
+}
+
 pub struct MinFillSelector {
     graph: HashMapGraph,
     cache: FnvHashMap<usize, usize>,
@@ -561,10 +611,6 @@ impl DistanceTwoNeighbors {
                 .collect(),
         )
     }
-}
-
-pub enum SelectorType {
-    MinFill,
 }
 
 pub trait Selector: From<HashMapGraph> {
