@@ -5,7 +5,10 @@ use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::upperbound::{HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillStrategy, UpperboundHeuristic, heuristic_elimination_decompose, MinFillSelector};
+use crate::upperbound::{
+    heuristic_elimination_decompose, HeuristicEliminationOrderDecomposer, MinDegreeStrategy,
+    MinFillSelector, MinFillStrategy, UpperboundHeuristic,
+};
 use fnv::FnvHashSet;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
@@ -97,7 +100,11 @@ impl Preprocessor for RuleBasedPreprocessor {
         }
     }
 
-    fn combine_into_td(mut self, mut td: TreeDecomposition, graph: &HashMapGraph) -> TreeDecomposition {
+    fn combine_into_td(
+        mut self,
+        mut td: TreeDecomposition,
+        graph: &HashMapGraph,
+    ) -> TreeDecomposition {
         //println!("c Combining");
         //self.partial_tree_decomposition = td;
         let mut vertices = FnvHashSet::default();
@@ -486,9 +493,21 @@ impl SearchState {
         match self.separation_level {
             SeparationLevel::Connected => self.graph.find_cut_vertex(),
             SeparationLevel::BiConnected => self.graph.find_safe_bi_connected_separator(),
-            SeparationLevel::TriConnected => if self.graph.order() < 250 { self.graph.find_safe_tri_connected_separator() } else { None },
+            SeparationLevel::TriConnected => {
+                if self.graph.order() < 250 {
+                    self.graph.find_safe_tri_connected_separator()
+                } else {
+                    None
+                }
+            }
             SeparationLevel::Clique => self.graph.find_clique_minimal_separator(),
-            SeparationLevel::AlmostClique => if self.graph.order() < 250 { self.graph.find_almost_clique_minimal_separator() } else { None },
+            SeparationLevel::AlmostClique => {
+                if self.graph.order() < 250 {
+                    self.graph.find_almost_clique_minimal_separator()
+                } else {
+                    None
+                }
+            }
             SeparationLevel::MinorSafeClique => self.graph.find_minor_safe_separator(),
             SeparationLevel::Atomic => None,
         }
