@@ -1,9 +1,9 @@
 use crate::datastructures::BitSet;
 use crate::exact::ExactSolver;
-use crate::graph::bag::Bag;
-use crate::graph::bag::TreeDecomposition;
 use crate::graph::bit_graph::*;
 use crate::graph::graph::Graph;
+use crate::graph::tree_decomposition::Bag;
+use crate::graph::tree_decomposition::TreeDecomposition;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::any::Any;
 use std::borrow::{Borrow, BorrowMut};
@@ -55,7 +55,7 @@ impl From<HeapBitset> for BitSet {
     }
 }
 
-pub struct PID<G: Graph> {
+pub struct TamakiPid<G: Graph> {
     phantom: PhantomData<G>,
     og_to_self: FnvHashMap<u32, u32>,
     self_to_og: Vec<u32>,
@@ -73,7 +73,7 @@ pub struct PID<G: Graph> {
     cache: Cache,
 }
 
-impl<G: Graph> PID<G> {
+impl<G: Graph> TamakiPid<G> {
     fn create_tree_decomposition(&self) -> TreeDecomposition {
         let pmc = self.solution.as_ref().unwrap().clone();
         let mut td = TreeDecomposition::new();
@@ -106,7 +106,7 @@ impl<G: Graph> PID<G> {
     }
 }
 
-impl<G: Graph> ExactSolver<G> for PID<G> {
+impl<G: Graph> ExactSolver<G> for TamakiPid<G> {
     fn with_graph(og_graph: &G) -> Self {
         Self::with_bounds(og_graph, 0, og_graph.order())
     }

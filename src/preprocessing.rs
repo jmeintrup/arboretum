@@ -1,14 +1,11 @@
-use crate::exact::pid::PID;
+use crate::exact::tamakipid::TamakiPid;
 use crate::exact::ExactSolver;
-use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
+use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::heuristic_elimination_order::{heuristic_elimination_decompose, MinFillSelector};
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::upperbound::{
-    heuristic_elimination_decompose, HeuristicEliminationOrderDecomposer, MinDegreeStrategy,
-    MinFillSelector, MinFillStrategy, UpperboundHeuristic,
-};
 use fnv::FnvHashSet;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
@@ -482,7 +479,7 @@ impl SearchState {
             tmp.get()
         };
         let mut solver =
-            PID::with_bounds(self.graph.borrow(), lowerbound, upperbound.max_bag_size - 1);
+            TamakiPid::with_bounds(self.graph.borrow(), lowerbound, upperbound.max_bag_size - 1);
         match solver.compute_exact() {
             Ok(td) => td,
             Err(_) => upperbound,

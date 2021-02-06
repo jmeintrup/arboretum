@@ -1,14 +1,11 @@
-use crate::exact::pid::PID;
+use crate::exact::tamakipid::TamakiPid;
 use crate::exact::ExactSolver;
-use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
+use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::heuristic_elimination_order::{heuristic_elimination_decompose, MinFillSelector};
 use crate::lowerbound::LowerboundHeuristic;
 use crate::preprocessing::{Preprocessor, RuleBasedPreprocessor, SafeSeparatorFramework};
-use crate::upperbound::{
-    heuristic_elimination_decompose, HeuristicEliminationOrderDecomposer, MinFillSelector,
-    MinFillStrategy, UpperboundHeuristic,
-};
 use std::process::exit;
 
 pub struct SolverBuilder {

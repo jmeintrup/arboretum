@@ -1,11 +1,8 @@
 use crate::datastructures::BitSet;
-use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::upperbound::{
-    heuristic_elimination_decompose, HeuristicEliminationOrderDecomposer, MinDegreeStrategy,
-    MinFillDegreeStrategy, MinFillSelector, MinFillStrategy, UpperboundHeuristic,
-};
+use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::heuristic_elimination_order::{heuristic_elimination_decompose, MinFillSelector};
 use crate::util::EliminationOrder;
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;

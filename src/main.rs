@@ -1,6 +1,6 @@
-use arboretum::graph::bag::TreeDecomposition;
 use arboretum::graph::graph::Graph;
 use arboretum::graph::hash_map_graph::HashMapGraph;
+use arboretum::graph::tree_decomposition::TreeDecomposition;
 use arboretum::io::PaceReader;
 use arboretum::solver::SolverBuilder;
 use std::convert::TryFrom;

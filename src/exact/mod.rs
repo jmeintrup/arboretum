@@ -1,8 +1,8 @@
-use crate::graph::bag::TreeDecomposition;
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
+use crate::graph::tree_decomposition::TreeDecomposition;
 
-pub mod pid;
+pub mod tamakipid;
 
 pub trait ExactSolver<G: Graph> {
     fn with_graph(graph: &G) -> Self;
