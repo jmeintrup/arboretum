@@ -5,9 +5,7 @@ use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::upperbound::{
-    HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillStrategy, UpperboundHeuristic,
-};
+use crate::upperbound::{HeuristicEliminationOrderDecomposer, MinDegreeStrategy, MinFillStrategy, UpperboundHeuristic, heuristic_elimination_decompose, MinFillSelector};
 use fnv::FnvHashSet;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
@@ -458,21 +456,14 @@ impl SearchState {
         log_state.increment(self.separation_level);
         self.log_state.set(log_state);
         //todo: add solver builder that returns a solver that is then called on the graph
-        let min_fill =
-            HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinFillStrategy)
-                .compute_upperbound();
-        let min_degree =
-            HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinDegreeStrategy)
-                .compute_upperbound();
-        let upperbound = if min_fill.max_bag_size < min_degree.max_bag_size {
-            min_fill
-        } else {
-            min_degree
-        };
+        let upperbound = heuristic_elimination_decompose::<MinFillSelector>(self.graph.clone());
         let mmw = MinorMinWidth::compute(self.graph.borrow());
         {
             let lb: &Cell<_> = self.lower_bound.borrow();
-            lb.set(max(lb.get(), mmw));
+            if mmw > lb.get() {
+                println!("c Found new Lowerbound. Previous {} Now {}", lb.get(), mmw);
+                lb.set(mmw);
+            }
             println!(
                 "c Atom has upperbound {}. Global lowerbound is {}",
                 upperbound.max_bag_size - 1,
@@ -495,9 +486,9 @@ impl SearchState {
         match self.separation_level {
             SeparationLevel::Connected => self.graph.find_cut_vertex(),
             SeparationLevel::BiConnected => self.graph.find_safe_bi_connected_separator(),
-            SeparationLevel::TriConnected => self.graph.find_safe_tri_connected_separator(),
+            SeparationLevel::TriConnected => if self.graph.order() < 250 { self.graph.find_safe_tri_connected_separator() } else { None },
             SeparationLevel::Clique => self.graph.find_clique_minimal_separator(),
-            SeparationLevel::AlmostClique => self.graph.find_almost_clique_minimal_separator(),
+            SeparationLevel::AlmostClique => if self.graph.order() < 250 { self.graph.find_almost_clique_minimal_separator() } else { None },
             SeparationLevel::MinorSafeClique => self.graph.find_minor_safe_separator(),
             SeparationLevel::Atomic => None,
         }
@@ -533,68 +524,6 @@ impl SafeSeparatorFramework {
         let mut lb = { self.lower_bound.get() };
         let mut log_state = { self.log_state.get() };
 
-        /*let mut atom_states: Vec<AtomState> = Vec::default();
-        for bag in td
-            .bags
-            .iter()
-            .filter(|b| b.vertex_set.len() > 0 && b.vertex_set.len() - 1 > lb)
-        {
-            let mut graph = self.graph.vertex_induced_subgraph(&bag.vertex_set);
-            for neighbor in bag.neighbors.iter().copied() {
-                let intersection: Vec<_> = bag
-                    .vertex_set
-                    .intersection(&td.bags[neighbor].vertex_set)
-                    .copied()
-                    .collect();
-                graph.make_clique(&intersection);
-            }
-            atom_states.push(AtomState {
-                graph,
-                target_bag: bag.id,
-                tree_decomposition: None,
-            });
-        }
-        if atom_states.is_empty() {
-            return DecompositionResult {
-                tree_decomposition: td,
-                decomposition_information: self.log_state.get(),
-            };
-        }
-        log_state.max_atom = atom_states.iter().map(|s| s.graph.order()).max().unwrap();
-        self.log_state.set(log_state);
-        lb = max(
-            lb,
-            atom_states
-                .iter()
-                .map(|s| MinorMinWidth::compute(&s.graph))
-                .max()
-                .unwrap(),
-        );
-        for mut s in atom_states {
-            if s.graph.order() - 1 <= lb {
-                continue;
-            }
-            let min_fill =
-                HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinFillStrategy)
-                    .compute_upperbound();
-            let min_degree =
-                HeuristicEliminationOrderDecomposer::new(self.graph.clone(), MinDegreeStrategy)
-                    .compute_upperbound();
-            s.tree_decomposition = if min_fill.max_bag_size < min_degree.max_bag_size {
-                Some(min_fill)
-            } else {
-                Some(min_degree)
-            };
-            let width = s.tree_decomposition.as_ref().unwrap().max_bag_size - 1;
-            if width > lb {
-                let solver = PID::with_bounds(&s.graph, lb, width);
-                if let Ok(atom_td) = solver.compute_exact() {
-                    s.tree_decomposition = Some(atom_td);
-                    lb = max(s.tree_decomposition.as_ref().unwrap().max_bag_size - 1, lb);
-                };
-            }
-            td.replace_bag(s.target_bag, s.tree_decomposition.unwrap(), &s.graph);
-        }*/
         DecompositionResult {
             tree_decomposition: td,
             decomposition_information: self.log_state.get(),
