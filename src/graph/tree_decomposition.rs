@@ -52,33 +52,15 @@ impl TreeDecomposition {
     }
 
     pub fn flatten(&mut self) {
-        println!("c pre flatten size: {}", self.bags.len());
         while let Some((parent, child)) = self.find_combinable() {
-            //println!("c flatten... verifying at loop start");
-            for bag in &self.bags {
-                assert!(!bag.neighbors.contains(&bag.id));
-                for neighbor in &bag.neighbors {
-                    assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
-                }
-            }
             self.reroute(child, parent);
             self.remove_bag(child);
         }
-        println!("c post flatten size: {}", self.bags.len());
     }
 
     fn reroute(&mut self, old_bag: usize, parent_idx: usize) {
-        //println!("c rerouting from {} to {}", old_bag, parent_idx);
         let old_neighbors = self.bags[old_bag].neighbors.clone();
 
-        //println!("c Pre assertion:");
-        for bag in &self.bags {
-            assert!(!bag.neighbors.contains(&bag.id));
-            for neighbor in &bag.neighbors {
-                assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
-            }
-        }
-        //println!("c pre reroute assertions hold");
         self.bags[parent_idx].neighbors.extend(old_neighbors.iter());
         self.bags[parent_idx].neighbors.remove(&parent_idx);
         self.bags[parent_idx].neighbors.remove(&old_bag);
@@ -95,17 +77,6 @@ impl TreeDecomposition {
         }
 
         self.bags[old_bag].neighbors.clear();
-
-        assert!(!self.bags[parent_idx].neighbors.contains(&parent_idx));
-
-        //println!("c post reroute assertions:");
-        for bag in self.bags.iter().filter(|b| b.id != old_bag) {
-            assert!(!bag.neighbors.contains(&bag.id));
-            for neighbor in &bag.neighbors {
-                assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
-            }
-        }
-        //println!("c post reroute assertions hold");
     }
 
     fn remove_bag(&mut self, id: usize) {
@@ -124,13 +95,6 @@ impl TreeDecomposition {
                 //println!("c Neighbor {} {:?}", neighbor, self.bags[neighbor]);
                 assert_eq!(self.bags[neighbor].neighbors.remove(&old_last), true);
                 assert_eq!(self.bags[neighbor].neighbors.insert(id), true);
-            }
-        }
-        //println!("c Post removal assertions:");
-        for bag in &self.bags {
-            assert!(!bag.neighbors.contains(&bag.id));
-            for neighbor in &bag.neighbors {
-                assert!(self.bags[*neighbor].neighbors.contains(&bag.id));
             }
         }
     }

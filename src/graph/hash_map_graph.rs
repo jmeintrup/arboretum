@@ -25,6 +25,13 @@ struct MissingEdge {
     v: usize,
 }
 
+#[derive(Clone, Debug)]
+pub struct MinorSafeResult {
+    pub separator: FnvHashSet<usize>,
+    pub belongs_to: (usize, usize),
+    pub tree_decomposition: TreeDecomposition,
+}
+
 impl HashMapGraph {
     pub fn has_vertex(&self, u: usize) -> bool {
         self.data.contains_key(&u)
@@ -155,21 +162,41 @@ impl HashMapGraph {
         None
     }
 
-    pub fn find_minor_safe_separator(&self) -> Option<FnvHashSet<usize>> {
-        if let Some(separator) = self.minor_safe_helper(
-            heuristic_elimination_decompose::<MinFillSelector>(self.clone()),
-            25,
-        ) {
-            return Some(separator);
+    pub fn find_minor_safe_separator(
+        &self,
+        tree_decomposition: Option<TreeDecomposition>,
+    ) -> Option<MinorSafeResult> {
+        return match tree_decomposition {
+            None => {
+                let mut new_td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
+                new_td.flatten();
+                self.minor_safe_helper(new_td, 25)
+            }
+            Some(working_td) => {
+                match self.minor_safe_helper(working_td, 25) {
+                    None => {
+                        let mut new_td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
+                        new_td.flatten();
+                        self.minor_safe_helper(new_td, 25)
+                    }
+                    Some(result) => {
+                        Some(result)
+                    }
+                }
+            }
         }
-        None
+        /*let mut working_td = match tree_decomposition {
+            None => {
+                let mut td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
+                td.flatten();
+                td
+            },
+            Some(tree_decomposition) => tree_decomposition,
+        };
+        self.minor_safe_helper(working_td, 25)*/
     }
 
-    fn minor_safe_helper(
-        &self,
-        td: TreeDecomposition,
-        max_tries: u32,
-    ) -> Option<FnvHashSet<usize>> {
+    fn minor_safe_helper(&self, td: TreeDecomposition, max_tries: u32) -> Option<MinorSafeResult> {
         for first_bag in td.bags.iter() {
             for idx in first_bag.neighbors.iter().copied().filter(|id| {
                 *id >= first_bag.id && !td.bags[*id].vertex_set.eq(&first_bag.vertex_set)
@@ -181,7 +208,11 @@ impl HashMapGraph {
                     .copied()
                     .collect();
                 if self.is_minor_safe(&candidate, max_tries) {
-                    return Some(candidate);
+                    return Some(MinorSafeResult {
+                        separator: candidate,
+                        belongs_to: (min(first_bag.id, idx), max(first_bag.id, idx)),
+                        tree_decomposition: td,
+                    });
                 }
             }
         }

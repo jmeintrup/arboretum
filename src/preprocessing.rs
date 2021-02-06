@@ -3,16 +3,17 @@ use crate::exact::ExactSolver;
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::graph::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
 use crate::heuristic_elimination_order::{heuristic_elimination_decompose, MinFillSelector};
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use fnv::FnvHashSet;
+use fnv::{FnvHashMap, FnvHashSet};
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
 use std::cmp::max;
 use std::collections::VecDeque;
 use std::hash::Hash;
 use std::rc::Rc;
+use std::process::exit;
 
 pub trait Preprocessor {
     fn preprocess(&mut self);
@@ -86,11 +87,6 @@ impl Preprocessor for RuleBasedPreprocessor {
             self.process_stack();
             return;
         }
-        /* self.remove_low_fill_in();
-        if self.processed_graph.order() == 0 {
-            self.process_stack();
-            return;
-        }*/
         while self.apply_rules() {}
         if self.processed_graph.order() == 0 {
             self.process_stack();
@@ -102,8 +98,6 @@ impl Preprocessor for RuleBasedPreprocessor {
         mut td: TreeDecomposition,
         graph: &HashMapGraph,
     ) -> TreeDecomposition {
-        //println!("c Combining");
-        //self.partial_tree_decomposition = td;
         let mut vertices = FnvHashSet::default();
         for bag in &td.bags {
             vertices.extend(bag.vertex_set.iter().copied())
@@ -111,16 +105,8 @@ impl Preprocessor for RuleBasedPreprocessor {
         let tmp = self.stack.clone();
         self.stack.push(vertices);
         self.process_stack();
-        assert!(self.partial_tree_decomposition.verify(graph).is_ok());
-        //self.partial_tree_decomposition.flatten();
-        /*for bag in &self.partial_tree_decomposition.bags {
-            println!("c id: {} len: {} lb: {}", bag.id, bag.vertex_set.len(), self.lower_bound)
-        }*/
         self.partial_tree_decomposition.flatten();
         self.partial_tree_decomposition.replace_bag(0, td);
-        /*self.stack = tmp;
-        self.partial_tree_decomposition = td;
-        self.process_stack();*/
         self.partial_tree_decomposition
     }
 
@@ -232,7 +218,7 @@ impl RuleBasedPreprocessor {
             return true;
         }
         // cube rule
-        let cube: Option<Cube> = None;
+        let mut cube: Option<Cube> = None;
         for v in self.processed_graph.vertices() {
             if self.processed_graph.degree(v) != 3 {
                 continue;
@@ -243,14 +229,10 @@ impl RuleBasedPreprocessor {
                 .iter()
                 .copied()
                 .collect();
-            if nb
-                .iter()
-                .find(|x| self.processed_graph.degree(**x) != 3)
-                .is_none()
-            {
+            let (x, y, z) = (nb[0], nb[1], nb[2]);
+            if self.processed_graph.degree(x) != 3 || self.processed_graph.degree(y) != 3 || self.processed_graph.degree(z) != 3 {
                 continue;
             }
-            let (x, y, z) = (nb[0], nb[1], nb[2]);
             let x_nb: Vec<_> = self
                 .processed_graph
                 .neighborhood_set(x)
@@ -259,10 +241,10 @@ impl RuleBasedPreprocessor {
                 .collect();
             let mut a = if x_nb[0] == v { x_nb[2] } else { x_nb[0] };
             let mut b = if x_nb[1] == v { x_nb[2] } else { x_nb[1] };
-            if !self.processed_graph.has_edge(y, a) || !self.processed_graph.has_edge(z, b) {
+            if !(self.processed_graph.has_edge(y, a) && self.processed_graph.has_edge(z, b)) {
                 std::mem::swap(&mut a, &mut b);
             }
-            if !self.processed_graph.has_edge(y, a) || !self.processed_graph.has_edge(z, b) {
+            if !(self.processed_graph.has_edge(y, a) && self.processed_graph.has_edge(z, b)) {
                 continue;
             }
             let c_option = self
@@ -274,7 +256,7 @@ impl RuleBasedPreprocessor {
             }
             let c = c_option.unwrap();
 
-            let cube = Some(Cube {
+            cube = Some(Cube {
                 a,
                 b,
                 c,
@@ -291,7 +273,7 @@ impl RuleBasedPreprocessor {
             bag.insert(cube.z);
             bag.insert(cube.v);
             bag.insert(cube.c);
-            self.processed_graph.eliminate_vertex(cube.z);
+            self.processed_graph.remove_vertex(cube.z);
             self.processed_graph.add_edge(cube.a, cube.b);
             self.processed_graph.add_edge(cube.a, cube.c);
             self.processed_graph.add_edge(cube.a, cube.v);
@@ -394,9 +376,28 @@ struct SearchState {
     separation_level: SeparationLevel,
     lower_bound: Rc<Cell<usize>>,
     log_state: Rc<Cell<DecompositionInformation>>,
+    upperbound_td: Option<TreeDecomposition>,
 }
 
 impl SearchState {
+    fn graph_from_cc(&self, cc: &FnvHashSet<usize>, separator: &FnvHashSet<usize>) -> HashMapGraph {
+        let mut graph = self.graph.vertex_induced(cc);
+        for v in separator.iter() {
+            for u in separator.iter().filter(|u| v < *u) {
+                graph.add_edge(*v, *u);
+            }
+            for u in self
+                .graph
+                .neighborhood_set(*v)
+                .iter()
+                .filter(|u| cc.contains(*u))
+            {
+                graph.add_edge(*v, *u);
+            }
+        }
+        graph
+    }
+
     pub fn process_separator(&mut self, separator: &FnvHashSet<usize>) -> TreeDecomposition {
         let mut td = TreeDecomposition::new();
         let root = td.add_bag(separator.clone());
@@ -405,25 +406,14 @@ impl SearchState {
             lb.set(max(lb.get(), td.max_bag_size - 1));
         }
         for cc in self.graph.separate(&separator).iter() {
-            let mut graph = self.graph.vertex_induced(cc);
-            for v in separator.iter() {
-                for u in separator.iter().filter(|u| v < *u) {
-                    graph.add_edge(*v, *u);
-                }
-                for u in self
-                    .graph
-                    .neighborhood_set(*v)
-                    .iter()
-                    .filter(|u| cc.contains(*u))
-                {
-                    graph.add_edge(*v, *u);
-                }
-            }
+            let mut graph = self.graph_from_cc(cc, separator);
+
             let mut search_sate = SearchState {
                 graph,
                 separation_level: self.separation_level,
                 lower_bound: self.lower_bound.clone(),
                 log_state: self.log_state.clone(),
+                upperbound_td: None,
             };
             let partial = search_sate.search();
             td.combine_with(root, partial);
@@ -445,7 +435,7 @@ impl SearchState {
             td.add_bag(self.graph.vertices().collect());
             return td;
         }
-        while self.separation_level != SeparationLevel::Atomic {
+        while self.separation_level != SeparationLevel::MinorSafeClique {
             if let Some(separator) = self.find_separator() {
                 println!("c found safe separator: {:?}", self.separation_level);
                 let mut log_state = self.log_state.get();
@@ -456,6 +446,87 @@ impl SearchState {
                 self.separation_level = self.separation_level.increment().unwrap();
             }
         }
+        if self.separation_level == SeparationLevel::MinorSafeClique {
+            if let Some(mut result) = self
+                .graph
+                .find_minor_safe_separator(self.upperbound_td.clone())
+            {
+                let mut heuristic_td = result.tree_decomposition;
+
+                let separator = result.separator;
+
+                let mut td = TreeDecomposition::new();
+                let root = td.add_bag(separator.clone());
+                if td.max_bag_size > 0 {
+                    let lb: &Cell<_> = self.lower_bound.borrow();
+                    lb.set(max(lb.get(), td.max_bag_size - 1));
+                }
+                let components = self.graph.separate(&separator);
+                for cc in self.graph.separate(&separator) {
+                    let mut graph = self.graph_from_cc(&cc, &separator);
+
+                    let full_vertex_set: FnvHashSet<_> = graph.vertices().collect();
+
+                    let mut partial_heuristic_bags: Vec<_> = heuristic_td
+                        .bags
+                        .iter()
+                        .filter(|b| full_vertex_set.is_superset(&b.vertex_set))
+                        .cloned()
+                        .collect();
+                    let old_to_new: FnvHashMap<usize, usize> = partial_heuristic_bags
+                        .iter()
+                        .enumerate()
+                        .map(|(id, b)| (b.id, id))
+                        .collect();
+
+                    for bag in partial_heuristic_bags.iter_mut() {
+                        bag.id = *old_to_new.get(&bag.id).unwrap();
+                        bag.neighbors = bag
+                            .neighbors
+                            .iter()
+                            .filter(|i|old_to_new.contains_key(i))
+                            .map(|i| old_to_new.get(i).unwrap())
+                            .copied()
+                            .collect();
+                    }
+                    if partial_heuristic_bags.len() == 0 {
+                        let mut search_sate = SearchState {
+                            graph,
+                            separation_level: self.separation_level,
+                            lower_bound: self.lower_bound.clone(),
+                            log_state: self.log_state.clone(),
+                            upperbound_td: None,
+                        };
+
+                        let partial = search_sate.search();
+                        td.combine_with(root, partial);
+                    } else {
+                        let max_bag_size = partial_heuristic_bags
+                            .iter()
+                            .map(|b| b.vertex_set.len())
+                            .max()
+                            .unwrap();
+                        let upperbound_td = TreeDecomposition {
+                            bags: partial_heuristic_bags,
+                            root: Some(0),
+                            max_bag_size,
+                        };
+                        let mut search_sate = SearchState {
+                            graph,
+                            separation_level: self.separation_level,
+                            lower_bound: self.lower_bound.clone(),
+                            log_state: self.log_state.clone(),
+                            upperbound_td: Some(upperbound_td),
+                        };
+
+                        let partial = search_sate.search();
+                        td.combine_with(root, partial);
+                    }
+                }
+                return td;
+            }
+        }
+
         let mut log_state = self.log_state.get();
         log_state.increment(self.separation_level);
         self.log_state.set(log_state);
@@ -469,7 +540,8 @@ impl SearchState {
                 lb.set(mmw);
             }
             println!(
-                "c Atom has upperbound {}. Global lowerbound is {}",
+                "c Atom with size {} has upperbound {}. Global lowerbound is {}",
+                self.graph.order(),
                 upperbound.max_bag_size - 1,
                 lb.get()
             );
@@ -491,7 +563,7 @@ impl SearchState {
             SeparationLevel::Connected => self.graph.find_cut_vertex(),
             SeparationLevel::BiConnected => self.graph.find_safe_bi_connected_separator(),
             SeparationLevel::TriConnected => {
-                if self.graph.order() < 250 {
+                if self.graph.order() < 300 {
                     self.graph.find_safe_tri_connected_separator()
                 } else {
                     None
@@ -499,14 +571,13 @@ impl SearchState {
             }
             SeparationLevel::Clique => self.graph.find_clique_minimal_separator(),
             SeparationLevel::AlmostClique => {
-                if self.graph.order() < 250 {
+                if self.graph.order() < 300 {
                     self.graph.find_almost_clique_minimal_separator()
                 } else {
                     None
                 }
             }
-            SeparationLevel::MinorSafeClique => self.graph.find_minor_safe_separator(),
-            SeparationLevel::Atomic => None,
+            _ => None,
         }
     }
 }
@@ -531,6 +602,7 @@ impl SafeSeparatorFramework {
                 separation_level: SeparationLevel::Connected,
                 lower_bound: lb,
                 log_state,
+                upperbound_td: None,
             },
         }
     }

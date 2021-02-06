@@ -82,7 +82,7 @@ impl Solver {
                     if reduced_graph.order() == 0 {
                         td.combine_with_or_replace(0, reducer.into_td())
                     } else {
-                        let framework = SafeSeparatorFramework::new(reduced_graph.clone(), 4);
+                        let framework = SafeSeparatorFramework::new(reduced_graph.clone(), reducer.lower_bound);
                         let result = framework.compute();
                         let mut partial_td = result.tree_decomposition;
                         partial_td.flatten();
