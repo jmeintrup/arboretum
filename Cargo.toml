@@ -12,6 +12,7 @@ rand = "0.7.3"
 fnv = "1.0.7"
 bitvec = "0.19.1"
 structopt = "0.3.21"
+jemallocator = "0.3.2"
 
 [dev-dependencies]
 criterion = "0.3"
