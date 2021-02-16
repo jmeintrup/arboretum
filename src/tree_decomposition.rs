@@ -1,6 +1,6 @@
 use crate::datastructures::BitSet;
-use crate::graph::graph::Graph;
-use crate::graph::hash_map_graph::HashMapGraph;
+use crate::graph::Graph;
+use crate::graph::HashMapGraph;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};

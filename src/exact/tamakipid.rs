@@ -1,9 +1,9 @@
 use crate::datastructures::BitSet;
-use crate::graph::bit_graph::*;
-use crate::graph::graph::Graph;
-use crate::graph::hash_map_graph::HashMapGraph;
-use crate::graph::tree_decomposition::Bag;
-use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::graph::BitGraph;
+use crate::graph::Graph;
+use crate::graph::HashMapGraph;
+use crate::tree_decomposition::Bag;
+use crate::tree_decomposition::TreeDecomposition;
 use crate::solver::AtomSolver;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::any::Any;

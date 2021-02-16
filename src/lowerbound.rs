@@ -1,6 +1,6 @@
-use crate::graph::graph::Graph;
-use crate::graph::hash_map_graph::HashMapGraph;
-use crate::graph::mutable_graph::MutableGraph;
+use crate::graph::Graph;
+use crate::graph::HashMapGraph;
+use crate::graph::MutableGraph;
 use std::cmp::max;
 use std::collections::HashSet;
 

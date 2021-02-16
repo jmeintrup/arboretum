@@ -1,11 +1,10 @@
 use crate::datastructures::BitSet;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::tree_decomposition::TreeDecomposition;
 use crate::heuristic_elimination_order::{
     heuristic_elimination_decompose, MinDegreeSelector, MinFillSelector, Selector,
 };
-use crate::util::EliminationOrder;
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
 use rand::prelude::{SliceRandom, ThreadRng};
@@ -801,72 +800,6 @@ impl HashMapGraph {
             .map(|v| (v, graph.neighborhood(v).collect()))
             .collect();
         HashMapGraph { data }
-    }
-
-    pub fn inplace_min_fill(&self) -> EliminationOrder {
-        let mut data: Vec<usize> = Vec::with_capacity(self.order());
-        let mut width = 0;
-        let mut added: Vec<bool> = vec![false; self.order()];
-        let mut min_fills: Vec<usize> = vec![0; self.order()];
-
-        for v in self.data.keys() {
-            min_fills[*v] = self.fill_in_count(*v);
-        }
-
-        let mut stack: Vec<usize> = Vec::with_capacity(self.order());
-        while data.len() < self.order() {
-            let v = {
-                let mut min = 0;
-                for i in self.data.keys() {
-                    if !added[*i] && min_fills[*i] < min_fills[min] {
-                        min = *i;
-                    }
-                }
-                min
-            };
-            let degree_v = {
-                let mut degree = 0;
-                stack.push(v);
-                let mut visited = vec![false; self.order()];
-                while let Some(x) = stack.pop() {
-                    for u in self.data.get(&x).unwrap() {
-                        if !visited[*u] {
-                            visited[*u] = true;
-                            match data.iter().find(|x| *x == u) {
-                                Some(u) => {
-                                    stack.push(*u);
-                                }
-                                None => {
-                                    if *u != v {
-                                        degree += 1;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                degree
-            };
-            width = max(width, degree_v);
-
-            data.push(v);
-            added[v] = true;
-            for u in self.data.get(&v).unwrap().iter().filter(|u| !added[**u]) {
-                for v in self
-                    .data
-                    .get(&v)
-                    .unwrap()
-                    .iter()
-                    .filter(|v| !added[**v] && *v != u)
-                {
-                    if !self.has_edge(*u, *v) {
-                        min_fills[*v] -= 1;
-                    }
-                }
-            }
-        }
-
-        EliminationOrder::new(data, width)
     }
 }
 

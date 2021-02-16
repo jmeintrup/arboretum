@@ -1,10 +1,9 @@
 use crate::datastructures::BinaryQueue;
-use crate::graph::graph::Graph;
-use crate::graph::hash_map_graph::HashMapGraph;
-use crate::graph::mutable_graph::MutableGraph;
-use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::graph::Graph;
+use crate::graph::HashMapGraph;
+use crate::graph::MutableGraph;
+use crate::tree_decomposition::TreeDecomposition;
 use crate::solver::AtomSolver;
-use crate::util::{get_width, EliminationOrder, Stopper};
 use fnv::{FnvHashMap, FnvHashSet};
 use rand::prelude::*;
 use std::cmp::max;

@@ -1,7 +1,7 @@
-use crate::exact::tamakipid::TamakiPid;
-use crate::graph::graph::Graph;
-use crate::graph::hash_map_graph::HashMapGraph;
-use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::exact::TamakiPid;
+use crate::graph::Graph;
+use crate::graph::HashMapGraph;
+use crate::tree_decomposition::TreeDecomposition;
 use crate::heuristic_elimination_order::{
     heuristic_elimination_decompose, HeuristicEliminationDecomposer, MinDegreeDecomposer,
     MinDegreeSelector, MinFillDecomposer, MinFillDegree, MinFillDegreeSelector, MinFillSelector,

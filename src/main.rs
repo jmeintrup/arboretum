@@ -1,4 +1,4 @@
-use arboretum::graph::hash_map_graph::HashMapGraph;
+use arboretum::graph::HashMapGraph;
 use arboretum::io::{PaceReader, PaceWriter};
 use arboretum::solver::{AtomSolverType, Solver, UpperboundHeuristicType};
 use std::convert::TryFrom;
