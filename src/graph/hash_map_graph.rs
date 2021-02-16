@@ -2,7 +2,9 @@ use crate::datastructures::BitSet;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::graph::tree_decomposition::TreeDecomposition;
-use crate::heuristic_elimination_order::{heuristic_elimination_decompose, MinFillSelector, MinDegreeSelector, Selector};
+use crate::heuristic_elimination_order::{
+    heuristic_elimination_decompose, MinDegreeSelector, MinFillSelector, Selector,
+};
 use crate::util::EliminationOrder;
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
@@ -180,20 +182,12 @@ impl HashMapGraph {
     ) -> Option<MinorSafeResult> {
         let max_tries = 25;
         return match tree_decomposition {
-            None => {
-                self.no_match_minor_helper(max_tries)
-            }
-            Some(working_td) => {
-                match self.minor_safe_helper(working_td, max_tries) {
-                    None => {
-                        self.no_match_minor_helper(max_tries)
-                    }
-                    Some(result) => {
-                        Some(result)
-                    }
-                }
-            }
-        }
+            None => self.no_match_minor_helper(max_tries),
+            Some(working_td) => match self.minor_safe_helper(working_td, max_tries) {
+                None => self.no_match_minor_helper(max_tries),
+                Some(result) => Some(result),
+            },
+        };
     }
 
     fn minor_safe_helper(&self, td: TreeDecomposition, max_tries: u32) -> Option<MinorSafeResult> {

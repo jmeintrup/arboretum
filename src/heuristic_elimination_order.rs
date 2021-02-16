@@ -3,6 +3,7 @@ use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::solver::AtomSolver;
 use crate::util::{get_width, EliminationOrder, Stopper};
 use fnv::{FnvHashMap, FnvHashSet};
 use rand::prelude::*;
@@ -380,6 +381,126 @@ pub trait Selector: From<HashMapGraph> {
     fn graph(&self) -> &HashMapGraph;
     fn value(&self, v: usize) -> i64;
     fn eliminate_vertex(&mut self, v: usize);
+}
+
+pub type MinFillDecomposer = HeuristicEliminationDecomposer<MinFillSelector>;
+pub type MinDegreeDecomposer = HeuristicEliminationDecomposer<MinDegreeSelector>;
+pub type MinFillDegree = HeuristicEliminationDecomposer<MinFillDegreeSelector>;
+
+pub struct HeuristicEliminationDecomposer<S: Selector> {
+    selector: S,
+    lowerbound: usize,
+    upperbound: usize,
+}
+
+impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
+    fn with_graph(graph: &HashMapGraph) -> Self {
+        Self {
+            selector: S::from(graph.clone()),
+            lowerbound: 0,
+            upperbound: if graph.order() > 0 {
+                graph.order() - 1
+            } else {
+                0
+            },
+        }
+    }
+
+    fn with_bounds(graph: &HashMapGraph, lowerbound: usize, upperbound: usize) -> Self {
+        Self {
+            selector: S::from(graph.clone()),
+            lowerbound,
+            upperbound,
+        }
+    }
+
+    fn compute(self) -> Result<TreeDecomposition, ()> {
+        let mut tree_decomposition = TreeDecomposition::new();
+        if self.selector.graph().order() <= self.lowerbound + 1 {
+            tree_decomposition.add_bag(self.selector.graph().vertices().collect());
+            return Ok(tree_decomposition);
+        }
+
+        let mut max_bag = 2;
+        let upperbound = self.upperbound;
+        let lowerbound = self.lowerbound;
+        let mut selector = self.selector;
+        let mut pq = BinaryQueue::new();
+
+        let mut bags: FnvHashMap<usize, FnvHashSet<usize>> = FnvHashMap::default();
+        let mut eliminated_at: FnvHashMap<usize, usize> = FnvHashMap::default();
+
+        for v in selector.graph().vertices() {
+            pq.insert(v, selector.value(v))
+        }
+
+        let mut stack: Vec<usize> = vec![];
+        while let Some((u, _)) = pq.pop_min() {
+            if selector.graph().order() <= max_bag || selector.graph().order() <= lowerbound + 1 {
+                break;
+            }
+
+            if selector.graph().degree(u) > upperbound {
+                return Err(());
+            }
+
+            let mut nb: FnvHashSet<usize> = selector.graph().neighborhood(u).collect();
+            max_bag = max(max_bag, nb.len() + 1);
+            stack.push(u);
+            bags.insert(u, nb.clone());
+            eliminated_at.insert(u, stack.len() - 1);
+            selector.eliminate_vertex(u);
+
+            let tmp: Vec<_> = nb
+                .iter()
+                .copied()
+                .filter(|u| selector.graph().neighborhood_set(*u).len() < nb.len())
+                .collect();
+
+            // eliminate directly, as these are subsets of the current bag
+            /*for u in tmp {
+                selector.eliminate_vertex(u);
+                nb.remove(&u);
+                pq.remove(u);
+            }*/
+            for u in nb {
+                pq.insert(u, selector.value(u));
+            }
+        }
+
+        if selector.graph().order() > 0 {
+            let mut rest: FnvHashSet<usize> = selector.graph().vertices().collect();
+            let u = rest.iter().next().copied().unwrap();
+            rest.remove(&u);
+            bags.insert(u, rest);
+            stack.push(u);
+            eliminated_at.insert(u, stack.len() - 1);
+        }
+
+        for v in stack.iter().rev() {
+            let mut nb = bags.remove(v).unwrap();
+            let old_bag_id = match tree_decomposition
+                .bags
+                .iter()
+                .find(|old_bag| old_bag.vertex_set.is_superset(&nb))
+            {
+                Some(old_bag) => Some(old_bag.id),
+                None => None,
+            };
+            match old_bag_id {
+                Some(old_bag_id) => {
+                    nb.insert(*v);
+                    let id = tree_decomposition.add_bag(nb);
+                    tree_decomposition.add_edge(old_bag_id, id);
+                }
+                None => {
+                    nb.insert(*v);
+                    tree_decomposition.add_bag(nb);
+                }
+            }
+        }
+        Ok(tree_decomposition)
+    }
 }
 
 pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> TreeDecomposition {

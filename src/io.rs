@@ -1,10 +1,60 @@
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
+use crate::graph::tree_decomposition::TreeDecomposition;
 use std::convert::TryFrom;
-use std::io::{BufRead, ErrorKind};
+use std::io::{BufRead, ErrorKind, Write};
 
 pub struct PaceReader<T: BufRead>(pub T);
+
+pub struct PaceWriter<'a, 'b: 'a, T: Write> {
+    tree_decomposition: &'a TreeDecomposition,
+    graph: &'b HashMapGraph,
+    writer: T,
+}
+
+impl<'a, 'b: 'a, T: Write> PaceWriter<'a, 'b, T> {
+    pub fn output(mut self) -> Result<(), std::io::Error> {
+        let bag_count: usize = self.tree_decomposition.bags.len();
+        let max_bag: usize = self.tree_decomposition.max_bag_size;
+        writeln!(
+            self.writer,
+            "s td {} {} {}",
+            bag_count,
+            max_bag,
+            self.graph.order()
+        );
+        self.tree_decomposition.bags().iter().for_each(|b| {
+            let mut tmp: Vec<_> = b.vertex_set.iter().copied().collect();
+            tmp.sort();
+            let vertices: Vec<_> = tmp.iter().map(|i| (i + 1).to_string()).collect();
+            let vertices = vertices.iter().fold(String::new(), |mut acc, v| {
+                acc.push_str(v.as_str());
+                acc.push_str(" ");
+                acc
+            });
+            writeln!(self.writer, "b {} {}", b.id + 1, vertices);
+        });
+        self.tree_decomposition.bags().iter().for_each(|b| {
+            for child in b.neighbors.iter().copied().filter(|i| *i > b.id) {
+                writeln!(self.writer, "{} {}", b.id + 1, child + 1);
+            }
+        });
+        Ok(())
+    }
+
+    pub fn new(
+        tree_decomposition: &'a TreeDecomposition,
+        graph: &'b HashMapGraph,
+        writer: T,
+    ) -> Self {
+        Self {
+            tree_decomposition,
+            graph,
+            writer,
+        }
+    }
+}
 
 impl<T: BufRead> TryFrom<PaceReader<T>> for HashMapGraph {
     type Error = std::io::Error;

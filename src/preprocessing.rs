@@ -1,19 +1,22 @@
 use crate::exact::tamakipid::TamakiPid;
-use crate::exact::ExactSolver;
 use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::graph::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
-use crate::heuristic_elimination_order::{heuristic_elimination_decompose, MinFillSelector};
+use crate::heuristic_elimination_order::{
+    heuristic_elimination_decompose, HeuristicEliminationDecomposer, MinFillDecomposer,
+    MinFillSelector,
+};
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
+use crate::solver::AtomSolver;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
 use std::cmp::max;
 use std::collections::VecDeque;
 use std::hash::Hash;
-use std::rc::Rc;
 use std::process::exit;
+use std::rc::Rc;
 
 pub trait Preprocessor {
     fn preprocess(&mut self);
@@ -230,7 +233,10 @@ impl RuleBasedPreprocessor {
                 .copied()
                 .collect();
             let (x, y, z) = (nb[0], nb[1], nb[2]);
-            if self.processed_graph.degree(x) != 3 || self.processed_graph.degree(y) != 3 || self.processed_graph.degree(z) != 3 {
+            if self.processed_graph.degree(x) != 3
+                || self.processed_graph.degree(y) != 3
+                || self.processed_graph.degree(z) != 3
+            {
                 continue;
             }
             let x_nb: Vec<_> = self
@@ -489,7 +495,7 @@ impl SearchState {
                         bag.neighbors = bag
                             .neighbors
                             .iter()
-                            .filter(|i|old_to_new.contains_key(i))
+                            .filter(|i| old_to_new.contains_key(i))
                             .map(|i| old_to_new.get(i).unwrap())
                             .copied()
                             .collect();
@@ -536,8 +542,11 @@ impl SearchState {
         log_state.increment(self.separation_level);
         self.log_state.set(log_state);
         //todo: add solver builder that returns a solver that is then called on the graph
-        let upperbound = heuristic_elimination_decompose::<MinFillSelector>(self.graph.clone());
-        let mmw = MinorMinWidth::compute(self.graph.borrow());
+        let upperbound =
+            MinFillDecomposer::with_bounds(&self.graph, lowerbound, self.graph.order())
+                .compute()
+                .unwrap();
+        let mmw = MinorMinWidth::with_graph(&self.graph).compute();
         {
             let lb: &Cell<_> = self.lower_bound.borrow();
             if mmw > lb.get() {
@@ -557,7 +566,7 @@ impl SearchState {
         };
         let mut solver =
             TamakiPid::with_bounds(self.graph.borrow(), lowerbound, upperbound.max_bag_size - 1);
-        match solver.compute_exact() {
+        match solver.compute() {
             Ok(td) => td,
             Err(_) => upperbound,
         }
@@ -613,13 +622,14 @@ impl SafeSeparatorFramework {
     }
 
     pub fn compute(mut self) -> DecompositionResult {
-        let mut td = self.search_state.search();
-        let mut lb = { self.lower_bound.get() };
-        let mut log_state = { self.log_state.get() };
+        let td = self.search_state.search();
+        let lowerbound = self.lower_bound.get();
+        let log_state = self.log_state.get();
 
         DecompositionResult {
             tree_decomposition: td,
             decomposition_information: self.log_state.get(),
+            lowerbound,
         }
     }
 }
@@ -671,4 +681,5 @@ impl DecompositionInformation {
 pub struct DecompositionResult {
     pub tree_decomposition: TreeDecomposition,
     pub decomposition_information: DecompositionInformation,
+    pub lowerbound: usize,
 }

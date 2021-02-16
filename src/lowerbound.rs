@@ -1,17 +1,29 @@
+use crate::graph::graph::Graph;
 use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::mutable_graph::MutableGraph;
 use std::cmp::max;
 use std::collections::HashSet;
 
 pub trait LowerboundHeuristic {
-    fn compute<G: MutableGraph>(graph: &G) -> usize;
+    fn with_graph(graph: &HashMapGraph) -> Self
+    where
+        Self: Sized;
+    fn compute(self) -> usize;
 }
 
-pub struct MinorMinWidth {}
+pub struct MinorMinWidth {
+    graph: HashMapGraph,
+}
 
 impl LowerboundHeuristic for MinorMinWidth {
-    fn compute<G: MutableGraph>(graph: &G) -> usize {
-        let mut graph = graph.clone();
+    fn with_graph(graph: &HashMapGraph) -> Self {
+        Self {
+            graph: graph.clone(),
+        }
+    }
+
+    fn compute(self) -> usize {
+        let mut graph = self.graph;
         let mut lb = 0;
         while graph.order() > 0 {
             if let Some(v) = graph

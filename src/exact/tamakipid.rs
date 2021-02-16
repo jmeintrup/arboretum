@@ -1,9 +1,10 @@
 use crate::datastructures::BitSet;
-use crate::exact::ExactSolver;
 use crate::graph::bit_graph::*;
 use crate::graph::graph::Graph;
+use crate::graph::hash_map_graph::HashMapGraph;
 use crate::graph::tree_decomposition::Bag;
 use crate::graph::tree_decomposition::TreeDecomposition;
+use crate::solver::AtomSolver;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::any::Any;
 use std::borrow::{Borrow, BorrowMut};
@@ -106,12 +107,12 @@ impl<G: Graph> TamakiPid<G> {
     }
 }
 
-impl<G: Graph> ExactSolver<G> for TamakiPid<G> {
-    fn with_graph(og_graph: &G) -> Self {
-        Self::with_bounds(og_graph, 0, og_graph.order())
+impl AtomSolver for TamakiPid<HashMapGraph> {
+    fn with_graph(og_graph: &HashMapGraph) -> Self {
+        Self::with_bounds(og_graph, 0, og_graph.order() - 1)
     }
 
-    fn with_bounds(og_graph: &G, lowerbound: usize, upperbound: usize) -> Self {
+    fn with_bounds(og_graph: &HashMapGraph, lowerbound: usize, upperbound: usize) -> Self {
         let mut og_to_self = FnvHashMap::default();
         let mut self_to_og = Vec::with_capacity(og_graph.order());
 
@@ -143,7 +144,7 @@ impl<G: Graph> ExactSolver<G> for TamakiPid<G> {
         }
     }
 
-    fn compute_exact(mut self) -> Result<TreeDecomposition, ()> {
+    fn compute(mut self) -> Result<TreeDecomposition, ()> {
         if self.graph.order() <= 2 {
             let mut td = TreeDecomposition::new();
             if self.graph.order() > 0 {
