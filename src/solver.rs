@@ -8,7 +8,8 @@ use crate::heuristic_elimination_order::{
     Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::preprocessing::{Preprocessor, RuleBasedPreprocessor, SafeSeparatorFramework};
+use crate::rule_based_reducer::RuleBasedPreprocessor;
+use crate::safe_separator_framework::SafeSeparatorFramework;
 use std::array;
 use std::cmp::max;
 use std::hash::Hash;
