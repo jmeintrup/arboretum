@@ -22,13 +22,13 @@ once the first version is released on [crates.io](https://crates.io/) The first 
 ## Build
 As **arboretum** is implemented in rust, the CLI can simply be built via cargo
 
-```cargo build --release```
+```cargo build --release --features="cli"```
 
 ## Usage
 
 Using a graph in [.gr format](https://pacechallenge.org/2021/) the program can be used as follows
 ```
-cargo run --release < <graph.gr>
+cargo run --release --features="cli" < <graph.gr>
 ```
 or
 ```
