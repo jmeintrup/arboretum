@@ -117,12 +117,14 @@ impl<'a> SearchState<'a> {
             return TreeDecomposition::with_root(self.graph.vertices().collect());
         }
         #[cfg(feature = "handle-ctrlc")]
-        if crate::signals::received_ctrl_c() { // unknown lowerbound
+        if crate::signals::received_ctrl_c() {
+            // unknown lowerbound
             return TreeDecomposition::with_root(self.graph.vertices().collect());
         }
         while self.separation_level < SeparationLevel::MinorSafeClique {
             #[cfg(feature = "handle-ctrlc")]
-            if crate::signals::received_ctrl_c() { // unknown lowerbound
+            if crate::signals::received_ctrl_c() {
+                // unknown lowerbound
                 return TreeDecomposition::with_root(self.graph.vertices().collect());
             }
             match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
@@ -149,7 +151,8 @@ impl<'a> SearchState<'a> {
             && self.graph.order() < self.limits.minor_safe_separator
         {
             #[cfg(feature = "handle-ctrlc")]
-            if crate::signals::received_ctrl_c() { // unknown lowerbound
+            if crate::signals::received_ctrl_c() {
+                // unknown lowerbound
                 return TreeDecomposition::with_root(self.graph.vertices().collect());
             }
             if let Some(mut result) = self.graph.find_minor_safe_separator(
@@ -166,7 +169,7 @@ impl<'a> SearchState<'a> {
                 let mut heuristic_td = result.tree_decomposition;
                 #[cfg(feature = "handle-ctrlc")]
                 if crate::signals::received_ctrl_c() {
-                    return  heuristic_td;
+                    return heuristic_td;
                 }
 
                 let separator = result.separator;
@@ -233,7 +236,8 @@ impl<'a> SearchState<'a> {
         if self.limits.check_again_before_atom {
             while let Some(separation_level) = self.delayed_separation_levels.pop() {
                 #[cfg(feature = "handle-ctrlc")]
-                if crate::signals::received_ctrl_c() { // unknown lowerbound
+                if crate::signals::received_ctrl_c() {
+                    // unknown lowerbound
                     return TreeDecomposition::with_root(self.graph.vertices().collect());
                 }
                 match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
@@ -250,8 +254,11 @@ impl<'a> SearchState<'a> {
         }
         self.separation_level = SeparationLevel::Atomic;
         #[cfg(feature = "handle-ctrlc")]
-        if crate::signals::received_ctrl_c() { // unknown lowerbound
-            return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
+        if crate::signals::received_ctrl_c() {
+            // unknown lowerbound
+            return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(
+                self.graph.vertices().collect(),
+            ));
         }
 
         let mut log_state = self.log_state.get();
@@ -259,8 +266,11 @@ impl<'a> SearchState<'a> {
         self.log_state.set(log_state);
         let upperbound_td = self.algorithms.upperbound.compute(&self.graph, lowerbound);
         #[cfg(feature = "handle-ctrlc")]
-        if crate::signals::received_ctrl_c() { // unknown lowerbound
-            return upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
+        if crate::signals::received_ctrl_c() {
+            // unknown lowerbound
+            return upperbound_td.unwrap_or(TreeDecomposition::with_root(
+                self.graph.vertices().collect(),
+            ));
         }
         let upperbound = match &upperbound_td {
             None => self.graph.order() - 1,
@@ -290,8 +300,11 @@ impl<'a> SearchState<'a> {
             tmp.get()
         };
         #[cfg(feature = "handle-ctrlc")]
-        if crate::signals::received_ctrl_c() { // unknown lowerbound
-            return upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
+        if crate::signals::received_ctrl_c() {
+            // unknown lowerbound
+            return upperbound_td.unwrap_or(TreeDecomposition::with_root(
+                self.graph.vertices().collect(),
+            ));
         }
         match self
             .algorithms

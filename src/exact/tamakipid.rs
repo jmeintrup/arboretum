@@ -160,7 +160,8 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
 
         while self.target_width < self.upper_bound {
             #[cfg(feature = "handle-ctrlc")]
-            if crate::signals::received_ctrl_c() { // unknown lowerbound
+            if crate::signals::received_ctrl_c() {
+                // unknown lowerbound
                 return Err(());
             }
             self.cache.o_block_cache = OBlockCache::default();
@@ -201,7 +202,8 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
             loop {
                 while !self.ready_queue.is_empty() {
                     #[cfg(feature = "handle-ctrlc")]
-                    if crate::signals::received_ctrl_c() { // unknown lowerbound
+                    if crate::signals::received_ctrl_c() {
+                        // unknown lowerbound
                         return Err(());
                     }
                     let ready = self.ready_queue.pop_front().unwrap();
@@ -223,7 +225,8 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                 let endorsers = std::mem::replace(&mut self.pending_endorsers, Default::default());
                 for endorser in endorsers {
                     #[cfg(feature = "handle-ctrlc")]
-                    if crate::signals::received_ctrl_c() { // unknown lowerbound
+                    if crate::signals::received_ctrl_c() {
+                        // unknown lowerbound
                         return Err(());
                     }
                     if endorser.ready(&self.cache.i_block_cache) {

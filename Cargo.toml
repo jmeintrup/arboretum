@@ -11,16 +11,16 @@ num = "0.3.0"
 rand = "0.7.3"
 fnv = "1.0.7"
 bitvec = "0.19.1"
-log = "0.4.14"
+log = { version = "0.4.14", optional = true }
 structopt = { version = "0.3.21", optional = true }
 jemallocator = { version = "0.3.2", optional = true }
 env_logger = { version = "0.8.3", optional = true }
 ctrlc = { version = "3.1.7", optional = true }
 
 [features]
-default = []
-cli = ["structopt", "jemallocator", "env_logger"]
-handle-ctrlc = ["ctrlc"]
+handle-ctrlc=["ctrlc"]
+pace-logging=["log", "env_logger"]
+cli = ["structopt"]
 
 [dev-dependencies]
 criterion = "0.3"

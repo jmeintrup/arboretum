@@ -26,7 +26,11 @@ pub mod tree_decomposition;
 mod rule_based_reducer;
 mod safe_separator_framework;
 pub use rule_based_reducer::RuleBasedPreprocessor;
-pub use safe_separator_framework::SafeSeparatorFramework;
+pub use safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits};
 
 #[cfg(feature = "handle-ctrlc")]
 pub mod signals;
+
+#[cfg(feature = "log")]
+#[cfg(feature = "env_logger")]
+pub mod log;

@@ -1,6 +1,6 @@
 use arboretum::graph::HashMapGraph;
 use arboretum::io::{PaceReader, PaceWriter};
-use arboretum::solver::{AlgorithmTypes, AtomSolverType, Solver, UpperboundHeuristicType};
+use arboretum::solver::{pace_heuristic, Solver};
 use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -8,9 +8,12 @@ use std::io::{stdin, stdout, BufReader};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
+use arboretum::SafeSeparatorLimits;
+#[cfg(feature = "jemallocator")]
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
 
+#[cfg(feature = "jemallocator")]
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
@@ -30,16 +33,30 @@ struct Opt {
     #[structopt(parse(from_os_str))]
     output: Option<PathBuf>,
 
-    /// Mode. Heuristic or Exact. Defaults to exact.
+    /// Mode. 'heuristic', 'exact' or 'auto'. Defaults to Exact.
+    /// Any invalid input fails silently to 'exact'.
     #[structopt(short, long)]
-    heuristic: bool,
+    mode: Option<String>,
 }
 
 fn main() -> io::Result<()> {
     let opt = Opt::from_args();
+    let mode: &str = match opt.mode {
+        Some(value) => match value.as_str() {
+            "heuristic" => "heuristic",
+            "auto" => "auto",
+            "exact" => "exact",
+            _ => "exact",
+        },
+        None => "exact",
+    };
 
     #[cfg(feature = "handle-ctrlc")]
     arboretum::signals::initialize();
+
+    #[cfg(feature = "log")]
+    #[cfg(feature = "env_logger")]
+    arboretum::log::build_pace_logger();
 
     let graph: HashMapGraph = match opt.input {
         Some(path) => {
@@ -54,19 +71,28 @@ fn main() -> io::Result<()> {
         }
     };
 
-    let td = if opt.heuristic {
-        println!("c Running in default heuristic mode.");
-        Solver::default_heuristic().solve(&graph)
-    } else {
-        println!("c Running in default exact mode.");
-        Solver::default_exact().solve(&graph)
+    let file = match opt.output {
+        Some(path) => Some(OpenOptions::new().write(true).create(true).open(path)?),
+        None => None,
     };
 
-    match opt.output {
-        Some(path) => {
-            let writer = OpenOptions::new().write(true).create(true).open(path)?;
-            PaceWriter::new(&td, &graph, writer).output()
+    let td = match mode {
+        "heuristic" => {
+            println!("c Running in default heuristic mode.");
+            pace_heuristic(&graph)
         }
+        "auto" => {
+            println!("c Running in default auto mode.");
+            Solver::default_exact().solve(&graph)
+        }
+        _ => {
+            println!("c Running in default exact mode.");
+            Solver::default_exact().solve(&graph)
+        }
+    };
+
+    match file {
+        Some(file) => PaceWriter::new(&td, &graph, file).output(),
         None => {
             let writer = stdout();
             PaceWriter::new(&td, &graph, writer).output()

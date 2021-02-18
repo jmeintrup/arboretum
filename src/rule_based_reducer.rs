@@ -60,7 +60,8 @@ impl RuleBasedPreprocessor {
         }
         while self.apply_rules() {
             #[cfg(feature = "handle-ctrlc")]
-            if received_ctrl_c() { // unknown lowerbound
+            if received_ctrl_c() {
+                // unknown lowerbound
                 self.lower_bound = 0;
                 return break;
             }

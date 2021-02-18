@@ -30,7 +30,8 @@ impl LowerboundHeuristic for MinorMinWidth {
         let mut lb = 0;
         while graph.order() > 0 {
             #[cfg(feature = "handle-ctrlc")]
-            if received_ctrl_c() { // simply adds all remaining vertices into a single bag
+            if received_ctrl_c() {
+                // simply adds all remaining vertices into a single bag
                 return 0;
             }
             if let Some(v) = graph

@@ -2,14 +2,14 @@ use crate::datastructures::BinaryQueue;
 use crate::graph::Graph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
+#[cfg(feature = "handle-ctrlc")]
+use crate::signals::received_ctrl_c;
 use crate::solver::AtomSolver;
 use crate::tree_decomposition::TreeDecomposition;
 use fnv::{FnvHashMap, FnvHashSet};
 use rand::prelude::*;
 use std::cmp::max;
 use std::collections::HashMap;
-#[cfg(feature = "handle-ctrlc")]
-use crate::signals::received_ctrl_c;
 
 pub struct MinFillDegreeSelector {
     inner: MinFillSelector,
@@ -442,7 +442,8 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             }
 
             #[cfg(feature = "handle-ctrlc")]
-            if crate::signals::received_ctrl_c() { // unknown lowerbound
+            if crate::signals::received_ctrl_c() {
+                // unknown lowerbound
                 break;
             }
 
@@ -533,7 +534,8 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
         }
 
         #[cfg(feature = "handle-ctrlc")]
-        if received_ctrl_c() { // simply adds all remaining vertices into a single bag
+        if received_ctrl_c() {
+            // simply adds all remaining vertices into a single bag
             break;
         }
 
