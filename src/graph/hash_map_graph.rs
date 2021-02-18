@@ -1,14 +1,14 @@
 use crate::datastructures::BitSet;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
-use crate::tree_decomposition::TreeDecomposition;
 use crate::heuristic_elimination_order::{
     heuristic_elimination_decompose, MinDegreeSelector, MinFillSelector, Selector,
 };
+use crate::tree_decomposition::TreeDecomposition;
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
-use rand::prelude::{SliceRandom, ThreadRng};
-use rand::Rng;
+use rand::prelude::{SliceRandom, StdRng, ThreadRng};
+use rand::{Rng, SeedableRng};
 use std::cmp::{max, min, Ordering};
 use std::collections::{HashSet, VecDeque};
 use std::convert::TryFrom;
@@ -163,33 +163,39 @@ impl HashMapGraph {
         None
     }
 
-    fn no_match_minor_helper(&self, max_tries: u32) -> Option<MinorSafeResult> {
+    fn no_match_minor_helper(&self, max_tries: u32, seed: Option<u64>) -> Option<MinorSafeResult> {
         let mut new_td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
         new_td.flatten();
-        if let Some(result) = self.minor_safe_helper(new_td, max_tries) {
+        if let Some(result) = self.minor_safe_helper(new_td, max_tries, seed) {
             Some(result)
         } else {
             let mut new_td = heuristic_elimination_decompose::<MinDegreeSelector>(self.clone());
             new_td.flatten();
-            return self.minor_safe_helper(new_td, max_tries);
+            return self.minor_safe_helper(new_td, max_tries, seed);
         }
     }
 
     pub fn find_minor_safe_separator(
         &self,
         tree_decomposition: Option<TreeDecomposition>,
+        seed: Option<u64>,
     ) -> Option<MinorSafeResult> {
         let max_tries = 25;
         return match tree_decomposition {
-            None => self.no_match_minor_helper(max_tries),
-            Some(working_td) => match self.minor_safe_helper(working_td, max_tries) {
-                None => self.no_match_minor_helper(max_tries),
+            None => self.no_match_minor_helper(max_tries, seed),
+            Some(working_td) => match self.minor_safe_helper(working_td, max_tries, seed) {
+                None => self.no_match_minor_helper(max_tries, seed),
                 Some(result) => Some(result),
             },
         };
     }
 
-    fn minor_safe_helper(&self, td: TreeDecomposition, max_tries: u32) -> Option<MinorSafeResult> {
+    fn minor_safe_helper(
+        &self,
+        td: TreeDecomposition,
+        max_tries: u32,
+        seed: Option<u64>,
+    ) -> Option<MinorSafeResult> {
         for first_bag in td.bags.iter() {
             for idx in first_bag.neighbors.iter().copied().filter(|id| {
                 *id >= first_bag.id && !td.bags[*id].vertex_set.eq(&first_bag.vertex_set)
@@ -200,7 +206,7 @@ impl HashMapGraph {
                     .intersection(second_bag)
                     .copied()
                     .collect();
-                if self.is_minor_safe(&candidate, max_tries) {
+                if self.is_minor_safe(&candidate, max_tries, seed) {
                     return Some(MinorSafeResult {
                         separator: candidate,
                         belongs_to: (min(first_bag.id, idx), max(first_bag.id, idx)),
@@ -212,12 +218,17 @@ impl HashMapGraph {
         None
     }
 
-    fn is_minor_safe(&self, separator: &FnvHashSet<usize>, max_tries: u32) -> bool {
+    fn is_minor_safe(
+        &self,
+        separator: &FnvHashSet<usize>,
+        max_tries: u32,
+        seed: Option<u64>,
+    ) -> bool {
         let components = self.separate(separator);
         if components.len() < 2 {
             return false;
         }
-        let mut rng = ThreadRng::default();
+        let mut rng: StdRng = SeedableRng::seed_from_u64(seed.unwrap_or(1337 * 42 * 777));
 
         for component in components.iter() {
             let rest: FnvHashSet<usize> = self

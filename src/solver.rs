@@ -1,7 +1,6 @@
 use crate::exact::TamakiPid;
 use crate::graph::Graph;
 use crate::graph::HashMapGraph;
-use crate::tree_decomposition::TreeDecomposition;
 use crate::heuristic_elimination_order::{
     heuristic_elimination_decompose, HeuristicEliminationDecomposer, MinDegreeDecomposer,
     MinDegreeSelector, MinFillDecomposer, MinFillDegree, MinFillDegreeSelector, MinFillSelector,
@@ -10,6 +9,7 @@ use crate::heuristic_elimination_order::{
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::rule_based_reducer::RuleBasedPreprocessor;
 use crate::safe_separator_framework::SafeSeparatorFramework;
+use crate::tree_decomposition::TreeDecomposition;
 use std::array;
 use std::cmp::max;
 use std::hash::Hash;
@@ -41,7 +41,7 @@ pub enum LowerboundHeuristicType {
 }
 
 impl LowerboundHeuristicType {
-    fn compute(&self, graph: &HashMapGraph) -> Lowerbound {
+    pub(crate) fn compute(&self, graph: &HashMapGraph) -> Lowerbound {
         match self {
             LowerboundHeuristicType::None => {
                 graph.vertices().map(|v| graph.degree(v)).min().unwrap_or(0)
@@ -62,7 +62,11 @@ pub enum UpperboundHeuristicType {
 }
 
 impl UpperboundHeuristicType {
-    fn compute(&self, graph: &HashMapGraph, lowerbound: usize) -> Option<TreeDecomposition> {
+    pub(crate) fn compute(
+        &self,
+        graph: &HashMapGraph,
+        lowerbound: usize,
+    ) -> Option<TreeDecomposition> {
         match self {
             UpperboundHeuristicType::None => None,
             UpperboundHeuristicType::MinFill => {
@@ -165,7 +169,7 @@ pub enum AtomSolverType {
 }
 
 impl AtomSolverType {
-    fn compute(
+    pub(crate) fn compute(
         &self,
         sub_graph: &HashMapGraph,
         lowerbound: usize,
@@ -273,8 +277,8 @@ impl Solver {
                 lowerbound = max(lowerbound, new_lowerbound);
 
                 let mut partial_td = if self.apply_safe_separator_decomposition {
-                    let framework = SafeSeparatorFramework::new(reduced_graph.clone(), lowerbound);
-                    let result = framework.compute();
+                    let result =
+                        SafeSeparatorFramework::default().compute(reduced_graph, lowerbound);
                     lowerbound = max(lowerbound, result.lowerbound);
                     result.tree_decomposition
                 } else {

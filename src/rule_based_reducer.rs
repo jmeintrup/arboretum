@@ -2,13 +2,13 @@ use crate::exact::TamakiPid;
 use crate::graph::Graph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
 use crate::heuristic_elimination_order::{
     heuristic_elimination_decompose, HeuristicEliminationDecomposer, MinFillDecomposer,
     MinFillSelector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::solver::AtomSolver;
+use crate::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
 use fnv::{FnvHashMap, FnvHashSet};
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
@@ -171,7 +171,7 @@ impl RuleBasedPreprocessor {
                         && self.processed_graph.degree(*v) == 3
                         && self.processed_graph.degree(*u) == 3
                         && self.processed_graph.neighborhood_set(*u)
-                        == self.processed_graph.neighborhood_set(*v)
+                            == self.processed_graph.neighborhood_set(*v)
                 })
                 .is_some()
         });
