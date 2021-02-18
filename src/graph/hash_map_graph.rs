@@ -15,6 +15,9 @@ use std::convert::TryFrom;
 use std::io::BufRead;
 use std::iter::FromIterator;
 
+#[cfg(feature = "handle-ctrlc")]
+use crate::signals::received_ctrl_c;
+
 #[derive(Clone, Debug)]
 pub struct HashMapGraph {
     data: FnvHashMap<usize, FnvHashSet<usize>>,
@@ -73,6 +76,10 @@ impl HashMapGraph {
             return None;
         }
         for guess in self.data.keys().copied() {
+            #[cfg(feature = "handle-ctrlc")]
+            if received_ctrl_c() {
+                return None;
+            }
             let mut c = 0;
             let mut l: FnvHashMap<usize, usize> = FnvHashMap::default();
             let mut d: FnvHashMap<usize, usize> = FnvHashMap::default();
@@ -104,6 +111,10 @@ impl HashMapGraph {
                 .copied()
                 .filter(|forbidden2| *forbidden2 > f1)
             {
+                #[cfg(feature = "handle-ctrlc")]
+                if received_ctrl_c() {
+                    return None;
+                }
                 let u = self.data.keys().copied().find(|x| *x != f1 && *x != f2)?;
                 let mut c = 0;
                 let mut l: FnvHashMap<usize, usize> = FnvHashMap::default();
@@ -163,15 +174,20 @@ impl HashMapGraph {
         None
     }
 
-    fn no_match_minor_helper(&self, max_tries: u32, seed: Option<u64>) -> Option<MinorSafeResult> {
+    fn no_match_minor_helper(
+        &self,
+        max_tries: usize,
+        max_missing: usize,
+        seed: Option<u64>,
+    ) -> Option<MinorSafeResult> {
         let mut new_td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
         new_td.flatten();
-        if let Some(result) = self.minor_safe_helper(new_td, max_tries, seed) {
+        if let Some(result) = self.minor_safe_helper(new_td, max_tries, max_missing, seed) {
             Some(result)
         } else {
             let mut new_td = heuristic_elimination_decompose::<MinDegreeSelector>(self.clone());
             new_td.flatten();
-            return self.minor_safe_helper(new_td, max_tries, seed);
+            return self.minor_safe_helper(new_td, max_tries, max_missing, seed);
         }
     }
 
@@ -179,34 +195,42 @@ impl HashMapGraph {
         &self,
         tree_decomposition: Option<TreeDecomposition>,
         seed: Option<u64>,
+        max_tries: usize,
+        max_missing: usize,
     ) -> Option<MinorSafeResult> {
-        let max_tries = 25;
         return match tree_decomposition {
-            None => self.no_match_minor_helper(max_tries, seed),
-            Some(working_td) => match self.minor_safe_helper(working_td, max_tries, seed) {
-                None => self.no_match_minor_helper(max_tries, seed),
-                Some(result) => Some(result),
-            },
+            None => self.no_match_minor_helper(max_tries, max_missing, seed),
+            Some(working_td) => {
+                match self.minor_safe_helper(working_td, max_tries, max_missing, seed) {
+                    None => self.no_match_minor_helper(max_tries, max_missing, seed),
+                    Some(result) => Some(result),
+                }
+            }
         };
     }
 
     fn minor_safe_helper(
         &self,
         td: TreeDecomposition,
-        max_tries: u32,
+        max_tries: usize,
+        max_missing: usize,
         seed: Option<u64>,
     ) -> Option<MinorSafeResult> {
         for first_bag in td.bags.iter() {
             for idx in first_bag.neighbors.iter().copied().filter(|id| {
                 *id >= first_bag.id && !td.bags[*id].vertex_set.eq(&first_bag.vertex_set)
             }) {
+                #[cfg(feature = "handle-ctrlc")]
+                if received_ctrl_c() {
+                    return None;
+                }
                 let second_bag = &td.bags[idx].vertex_set;
                 let candidate: FnvHashSet<usize> = first_bag
                     .vertex_set
                     .intersection(second_bag)
                     .copied()
                     .collect();
-                if self.is_minor_safe(&candidate, max_tries, seed) {
+                if self.is_minor_safe(&candidate, max_tries, max_missing, seed) {
                     return Some(MinorSafeResult {
                         separator: candidate,
                         belongs_to: (min(first_bag.id, idx), max(first_bag.id, idx)),
@@ -221,9 +245,14 @@ impl HashMapGraph {
     fn is_minor_safe(
         &self,
         separator: &FnvHashSet<usize>,
-        max_tries: u32,
+        max_tries: usize,
+        max_missing: usize,
         seed: Option<u64>,
     ) -> bool {
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            return false;
+        }
         let components = self.separate(separator);
         if components.len() < 2 {
             return false;
@@ -231,6 +260,10 @@ impl HashMapGraph {
         let mut rng: StdRng = SeedableRng::seed_from_u64(seed.unwrap_or(1337 * 42 * 777));
 
         for component in components.iter() {
+            #[cfg(feature = "handle-ctrlc")]
+            if received_ctrl_c() {
+                return false;
+            }
             let rest: FnvHashSet<usize> = self
                 .data
                 .keys()
@@ -249,10 +282,17 @@ impl HashMapGraph {
                     missing_edges.push(MissingEdge { u, v });
                 }
             }
+            if missing_edges.len() > max_missing {
+                return false;
+            }
             let mut is_minor = false;
             'outer: for _ in 0..max_tries {
                 missing_edges.shuffle(&mut rng);
                 for missing_edge in missing_edges.iter() {
+                    #[cfg(feature = "handle-ctrlc")]
+                    if received_ctrl_c() {
+                        return false;
+                    }
                     if tmp
                         .data
                         .get(&missing_edge.v)
@@ -286,6 +326,10 @@ impl HashMapGraph {
                             separator.iter().copied().map(|v| (v, v)).collect();
                         pre.remove(&u);
                         while !pre.contains_key(&u) && !queue.is_empty() {
+                            #[cfg(feature = "handle-ctrlc")]
+                            if received_ctrl_c() {
+                                return false;
+                            }
                             let x = queue.pop_front().unwrap();
                             for k in tmp.data.get(&x).unwrap().iter().copied() {
                                 if pre.contains_key(&k) {
@@ -362,6 +406,10 @@ impl HashMapGraph {
 
     pub fn find_almost_clique_minimal_separator(&self) -> Option<FnvHashSet<usize>> {
         for v in self.data.keys().copied() {
+            #[cfg(feature = "handle-ctrlc")]
+            if received_ctrl_c() {
+                return None;
+            }
             let mut ignore = FnvHashSet::default();
             ignore.insert(v);
             if let Some(mut separator) = self.clique_minimal_separator_helper(&ignore) {
@@ -433,6 +481,10 @@ impl HashMapGraph {
 
         let n = self.order() - ignore.len();
         for _ in 0..n {
+            #[cfg(feature = "handle-ctrlc")]
+            if received_ctrl_c() {
+                return None;
+            }
             let x = *working_graph
                 .data
                 .keys()
@@ -556,6 +608,10 @@ impl HashMapGraph {
         d: &mut FnvHashMap<usize, usize>,
         ignore: &FnvHashSet<usize>,
     ) -> Option<usize> {
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            return None;
+        }
         *c += 1;
         let mut children = 0;
         l.insert(v, *c);
@@ -566,6 +622,10 @@ impl HashMapGraph {
                 children += 1;
                 if let Some(cut) = self.articulation_point_helper(v, *w, c, l, d, ignore) {
                     return Some(cut);
+                }
+                #[cfg(feature = "handle-ctrlc")]
+                if received_ctrl_c() {
+                    return None;
                 }
                 let a = *l.get(&v).unwrap();
                 let b = *l.get(&w).unwrap();

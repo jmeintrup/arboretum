@@ -38,6 +38,9 @@ struct Opt {
 fn main() -> io::Result<()> {
     let opt = Opt::from_args();
 
+    #[cfg(feature = "handle-ctrlc")]
+    arboretum::signals::initialize();
+
     let graph: HashMapGraph = match opt.input {
         Some(path) => {
             let file = File::open(path)?;

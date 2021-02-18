@@ -18,6 +18,9 @@ use std::hash::Hash;
 use std::process::exit;
 use std::rc::Rc;
 
+#[cfg(feature = "handle-ctrlc")]
+use crate::signals::received_ctrl_c;
+
 #[inline]
 fn eliminate(v: usize, graph: &mut HashMapGraph, stack: &mut Vec<FnvHashSet<usize>>) {
     let mut bag = graph.neighborhood_set(v).clone();
@@ -55,7 +58,13 @@ impl RuleBasedPreprocessor {
             self.process_stack();
             return;
         }
-        while self.apply_rules() {}
+        while self.apply_rules() {
+            #[cfg(feature = "handle-ctrlc")]
+            if received_ctrl_c() { // unknown lowerbound
+                self.lower_bound = 0;
+                return break;
+            }
+        }
         if self.processed_graph.order() == 0 {
             self.process_stack();
         }
