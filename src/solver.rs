@@ -7,22 +7,14 @@ use crate::heuristic_elimination_order::{
     Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
+use crate::macros;
 use crate::rule_based_reducer::RuleBasedPreprocessor;
-use crate::safe_separator_framework::SafeSeparatorFramework;
+use crate::safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits};
 use crate::tree_decomposition::TreeDecomposition;
 use std::array;
 use std::cmp::max;
 use std::hash::Hash;
 use std::process::exit;
-
-macro_rules! impl_setter {
-    ($self:ident, $field:ident, $type:ty) => {
-        pub fn $field(mut $self, $field: $type) -> Self {
-            $self.$field = $field;
-            $self
-        }
-    }
-}
 
 pub trait DynamicUpperboundHeuristic: AtomSolver {}
 impl<S: Selector> DynamicUpperboundHeuristic for HeuristicEliminationDecomposer<S> {}
@@ -34,10 +26,17 @@ pub type DynamicUpperbound =
 pub type DynamicExact = fn(&HashMapGraph, Lowerbound, Upperbound) -> Result<TreeDecomposition, ()>;
 pub type DynamicLowerbound = fn(&HashMapGraph) -> usize;
 
+#[derive(Clone, Copy)]
 pub enum LowerboundHeuristicType {
     None,
     MinorMinWidth,
     Custom(DynamicLowerbound),
+}
+
+impl Default for LowerboundHeuristicType {
+    fn default() -> Self {
+        Self::MinorMinWidth
+    }
 }
 
 impl LowerboundHeuristicType {
@@ -52,6 +51,7 @@ impl LowerboundHeuristicType {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum UpperboundHeuristicType {
     None,
     MinFill,
@@ -59,6 +59,12 @@ pub enum UpperboundHeuristicType {
     MinFillDegree,
     All,
     Custom(DynamicUpperbound),
+}
+
+impl Default for UpperboundHeuristicType {
+    fn default() -> Self {
+        Self::All
+    }
 }
 
 impl UpperboundHeuristicType {
@@ -107,10 +113,10 @@ impl UpperboundHeuristicType {
                 .compute()
                 .unwrap();
                 let mut best = a;
-                if best.max_bag_size < b.max_bag_size {
+                if best.max_bag_size > b.max_bag_size {
                     best = b;
                 }
-                if best.max_bag_size < c.max_bag_size {
+                if best.max_bag_size > c.max_bag_size {
                     best = c;
                 }
                 Some(best)
@@ -122,43 +128,7 @@ impl UpperboundHeuristicType {
     }
 }
 
-struct SafeSeparatorParameters {
-    size_one_separator_limit: Option<usize>,
-    size_two_separator_limit: Option<usize>,
-    size_three_separator_limit: Option<usize>,
-    clique_separator_limit: Option<usize>,
-    almost_clique_separator_limit: Option<usize>,
-    minor_safe_separator_limit: Option<usize>,
-    minor_safe_separator_tries: usize,
-    minor_safe_separator_max_missing_edges: Option<usize>,
-}
-
-impl Default for SafeSeparatorParameters {
-    fn default() -> Self {
-        Self {
-            size_one_separator_limit: None,
-            size_two_separator_limit: None,
-            size_three_separator_limit: Some(250),
-            clique_separator_limit: None,
-            almost_clique_separator_limit: Some(250),
-            minor_safe_separator_limit: None,
-            minor_safe_separator_tries: 25,
-            minor_safe_separator_max_missing_edges: None,
-        }
-    }
-}
-
-impl SafeSeparatorParameters {
-    impl_setter!(self, size_one_separator_limit, Option<usize>);
-    impl_setter!(self, size_two_separator_limit, Option<usize>);
-    impl_setter!(self, size_three_separator_limit, Option<usize>);
-    impl_setter!(self, clique_separator_limit, Option<usize>);
-    impl_setter!(self, almost_clique_separator_limit, Option<usize>);
-    impl_setter!(self, minor_safe_separator_limit, Option<usize>);
-    impl_setter!(self, minor_safe_separator_tries, usize);
-    impl_setter!(self, minor_safe_separator_max_missing_edges, Option<usize>);
-}
-
+#[derive(Clone, Copy)]
 pub enum AtomSolverType {
     None,
     MinFill,
@@ -166,6 +136,12 @@ pub enum AtomSolverType {
     MinFillDegree,
     Tamaki,
     Custom(DynamicExact),
+}
+
+impl Default for AtomSolverType {
+    fn default() -> Self {
+        Self::Tamaki
+    }
 }
 
 impl AtomSolverType {
@@ -203,40 +179,58 @@ impl AtomSolverType {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct AlgorithmTypes {
+    pub atom_solver: AtomSolverType,
+    pub upperbound: UpperboundHeuristicType,
+    pub lowerbound: LowerboundHeuristicType,
+}
+
+impl AlgorithmTypes {
+    impl_setter!(self, atom_solver, AtomSolverType);
+    impl_setter!(self, upperbound, UpperboundHeuristicType);
+    impl_setter!(self, lowerbound, LowerboundHeuristicType);
+}
+
 pub struct Solver {
+    algorithm_types: AlgorithmTypes,
+    safe_separator_limits: SafeSeparatorLimits,
     apply_reduction_rules: bool,
-    apply_safe_separator_decomposition: bool,
-    safe_separator_params: SafeSeparatorParameters,
-    lowerbound_heuristic_type: LowerboundHeuristicType,
-    upperbound_heuristic_type: UpperboundHeuristicType,
-    atom_solver_type: AtomSolverType,
     use_atom_bag_size_for_lowerbound: bool,
 }
 
 impl Default for Solver {
     fn default() -> Self {
         Self {
+            algorithm_types: AlgorithmTypes::default(),
+            safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
-            apply_safe_separator_decomposition: true,
-            safe_separator_params: SafeSeparatorParameters::default(),
-            lowerbound_heuristic_type: LowerboundHeuristicType::MinorMinWidth,
-            upperbound_heuristic_type: UpperboundHeuristicType::All,
-            atom_solver_type: AtomSolverType::Tamaki,
             use_atom_bag_size_for_lowerbound: true,
         }
     }
 }
 
 impl Solver {
-    impl_setter!(self, atom_solver_type, AtomSolverType);
-    impl_setter!(self, upperbound_heuristic_type, UpperboundHeuristicType);
-    impl_setter!(self, lowerbound_heuristic_type, LowerboundHeuristicType);
-    impl_setter!(self, apply_safe_separator_decomposition, bool);
+    pub fn default_heuristic() -> Self {
+        Self {
+            algorithm_types: AlgorithmTypes::default().atom_solver(AtomSolverType::None),
+            safe_separator_limits: SafeSeparatorLimits::default(),
+            apply_reduction_rules: true,
+            use_atom_bag_size_for_lowerbound: true,
+        }
+    }
+
+    pub fn default_exact() -> Self {
+        Self::default()
+    }
+
+    impl_setter!(self, algorithm_types, AlgorithmTypes);
+    impl_setter!(self, safe_separator_limits, SafeSeparatorLimits);
     impl_setter!(self, apply_reduction_rules, bool);
     impl_setter!(self, use_atom_bag_size_for_lowerbound, bool);
 
     pub fn solve(&self, graph: &HashMapGraph) -> TreeDecomposition {
-        let mut td = TreeDecomposition::new();
+        let mut td = TreeDecomposition::default();
         if graph.order() == 0 {
             return td;
         } else if graph.order() <= 2 {
@@ -276,50 +270,12 @@ impl Solver {
                 };
                 lowerbound = max(lowerbound, new_lowerbound);
 
-                let mut partial_td = if self.apply_safe_separator_decomposition {
-                    let result =
-                        SafeSeparatorFramework::default().compute(reduced_graph, lowerbound);
-                    lowerbound = max(lowerbound, result.lowerbound);
-                    result.tree_decomposition
-                } else {
-                    lowerbound = max(
-                        lowerbound,
-                        self.lowerbound_heuristic_type.compute(&sub_graph),
-                    );
-                    let upperbound_td: Option<_> = self
-                        .upperbound_heuristic_type
-                        .compute(&sub_graph, lowerbound);
-                    match upperbound_td {
-                        None => {
-                            match self.atom_solver_type.compute(
-                                &sub_graph,
-                                lowerbound,
-                                sub_graph.order() - 1,
-                            ) {
-                                Ok(td) => td,
-                                Err(_) => {
-                                    let mut td = TreeDecomposition::new();
-                                    td.add_bag(sub_graph.vertices().collect());
-                                    td
-                                }
-                            }
-                        }
-                        Some(upperbound_td) => {
-                            if upperbound_td.max_bag_size - 1 <= lowerbound {
-                                upperbound_td
-                            } else {
-                                match self.atom_solver_type.compute(
-                                    &sub_graph,
-                                    lowerbound,
-                                    upperbound_td.max_bag_size - 1,
-                                ) {
-                                    Ok(td) => td,
-                                    Err(_) => upperbound_td,
-                                }
-                            }
-                        }
-                    }
-                };
+                let mut result = SafeSeparatorFramework::default()
+                    .algorithms(self.algorithm_types)
+                    .safe_separator_limits(self.safe_separator_limits)
+                    .compute(reduced_graph, lowerbound);
+                lowerbound = max(lowerbound, result.lowerbound);
+                let mut partial_td = result.tree_decomposition;
                 partial_td.flatten();
                 if self.use_atom_bag_size_for_lowerbound {
                     lowerbound = max(lowerbound, partial_td.max_bag_size - 1);

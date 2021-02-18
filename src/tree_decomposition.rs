@@ -42,20 +42,28 @@ pub struct TreeDecomposition {
     pub max_bag_size: usize,
 }
 
-impl TreeDecomposition {
-    pub fn new() -> Self {
+impl Default for TreeDecomposition {
+    fn default() -> Self {
         Self {
             bags: Default::default(),
             root: None,
             max_bag_size: 0,
         }
     }
+}
 
+impl TreeDecomposition {
     pub fn flatten(&mut self) {
         while let Some((parent, child)) = self.find_combinable() {
             self.reroute(child, parent);
             self.remove_bag(child);
         }
+    }
+
+    pub fn with_root(vertex_set: FnvHashSet<usize>) -> Self {
+        let mut td = Self::default();
+        td.add_bag(vertex_set);
+        td
     }
 
     fn reroute(&mut self, old_bag: usize, parent_idx: usize) {

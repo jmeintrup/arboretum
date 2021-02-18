@@ -91,7 +91,7 @@ impl RuleBasedPreprocessor {
         Self {
             stack: vec![],
             lower_bound: 0,
-            partial_tree_decomposition: TreeDecomposition::new(),
+            partial_tree_decomposition: TreeDecomposition::default(),
             processed_graph: graph.clone(),
         }
     }

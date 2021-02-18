@@ -77,7 +77,7 @@ pub struct TamakiPid<G: Graph> {
 impl<G: Graph> TamakiPid<G> {
     fn create_tree_decomposition(&self) -> TreeDecomposition {
         let pmc = self.solution.as_ref().unwrap().clone();
-        let mut td = TreeDecomposition::new();
+        let mut td = TreeDecomposition::default();
         let vertex_set = self.translate_vertex_set(&pmc.vertex_set);
         let parent = td.add_bag(vertex_set);
         self.td_rec(parent, &mut td, &pmc);
@@ -146,7 +146,7 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
 
     fn compute(mut self) -> Result<TreeDecomposition, ()> {
         if self.graph.order() <= 2 {
-            let mut td = TreeDecomposition::new();
+            let mut td = TreeDecomposition::default();
             if self.graph.order() > 0 {
                 let vertex_set: FnvHashSet<usize> = (0..self.graph.order())
                     .map(|i| self.self_to_og[i as usize] as usize)

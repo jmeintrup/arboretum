@@ -1,6 +1,6 @@
 use arboretum::graph::HashMapGraph;
 use arboretum::io::{PaceReader, PaceWriter};
-use arboretum::solver::{AtomSolverType, Solver, UpperboundHeuristicType};
+use arboretum::solver::{AlgorithmTypes, AtomSolverType, Solver, UpperboundHeuristicType};
 use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -52,12 +52,11 @@ fn main() -> io::Result<()> {
     };
 
     let td = if opt.heuristic {
-        Solver::default()
-            .atom_solver_type(AtomSolverType::None)
-            .upperbound_heuristic_type(UpperboundHeuristicType::All)
-            .solve(&graph)
+        println!("c Running in default heuristic mode.");
+        Solver::default_heuristic().solve(&graph)
     } else {
-        Solver::default().solve(&graph)
+        println!("c Running in default exact mode.");
+        Solver::default_exact().solve(&graph)
     };
 
     match opt.output {

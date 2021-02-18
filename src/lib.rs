@@ -1,5 +1,17 @@
 #![allow(unused)]
 #![allow(dead_code)]
+#[macro_use]
+pub(crate) mod macros {
+    macro_rules! impl_setter {
+        ($self:ident, $field:ident, $type:ty) => {
+            pub fn $field(mut $self, $field: $type) -> Self {
+                $self.$field = $field;
+                $self
+            }
+        }
+    }
+}
+
 pub(crate) mod datastructures;
 pub(crate) use datastructures::{BinaryQueue, BitSet, BitSetIterator};
 
