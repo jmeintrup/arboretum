@@ -2,8 +2,8 @@ use crate::datastructures::BinaryQueue;
 use crate::graph::Graph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::tree_decomposition::TreeDecomposition;
 use crate::solver::AtomSolver;
+use crate::tree_decomposition::TreeDecomposition;
 use fnv::{FnvHashMap, FnvHashSet};
 use rand::prelude::*;
 use std::cmp::max;
@@ -414,7 +414,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
     }
 
     fn compute(self) -> Result<TreeDecomposition, ()> {
-        let mut tree_decomposition = TreeDecomposition::new();
+        let mut tree_decomposition = TreeDecomposition::default();
         if self.selector.graph().order() <= self.lowerbound + 1 {
             tree_decomposition.add_bag(self.selector.graph().vertices().collect());
             return Ok(tree_decomposition);
@@ -503,7 +503,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
 }
 
 pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> TreeDecomposition {
-    let mut tree_decomposition = TreeDecomposition::new();
+    let mut tree_decomposition = TreeDecomposition::default();
     if graph.order() <= 2 {
         tree_decomposition.add_bag(graph.vertices().collect());
         return tree_decomposition;
