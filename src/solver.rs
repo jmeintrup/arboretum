@@ -29,13 +29,13 @@ pub type DynamicLowerbound = fn(&HashMapGraph) -> usize;
 #[derive(Clone, Copy)]
 pub enum LowerboundHeuristicType {
     None,
-    MinorMinWidth,
+    MinorMinWidth(usize),
     Custom(DynamicLowerbound),
 }
 
 impl Default for LowerboundHeuristicType {
     fn default() -> Self {
-        Self::MinorMinWidth
+        Self::MinorMinWidth(10_000)
     }
 }
 
@@ -45,7 +45,13 @@ impl LowerboundHeuristicType {
             LowerboundHeuristicType::None => {
                 graph.vertices().map(|v| graph.degree(v)).min().unwrap_or(0)
             }
-            LowerboundHeuristicType::MinorMinWidth => MinorMinWidth::with_graph(&graph).compute(),
+            LowerboundHeuristicType::MinorMinWidth(limit) => {
+                if limit > &graph.order() {
+                    graph.vertices().map(|v| graph.degree(v)).min().unwrap_or(0)
+                } else {
+                    MinorMinWidth::with_graph(&graph).compute()
+                }
+            }
             LowerboundHeuristicType::Custom(heuristic) => heuristic(&graph),
         }
     }

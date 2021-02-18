@@ -4,6 +4,9 @@ use crate::graph::MutableGraph;
 use std::cmp::max;
 use std::collections::HashSet;
 
+#[cfg(feature = "handle-ctrlc")]
+use crate::signals::received_ctrl_c;
+
 pub trait LowerboundHeuristic {
     fn with_graph(graph: &HashMapGraph) -> Self
     where
@@ -26,6 +29,10 @@ impl LowerboundHeuristic for MinorMinWidth {
         let mut graph = self.graph;
         let mut lb = 0;
         while graph.order() > 0 {
+            #[cfg(feature = "handle-ctrlc")]
+            if received_ctrl_c() { // simply adds all remaining vertices into a single bag
+                return 0;
+            }
             if let Some(v) = graph
                 .vertices()
                 .filter(|v| graph.degree(*v) > 0)

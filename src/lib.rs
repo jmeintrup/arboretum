@@ -27,3 +27,6 @@ mod rule_based_reducer;
 mod safe_separator_framework;
 pub use rule_based_reducer::RuleBasedPreprocessor;
 pub use safe_separator_framework::SafeSeparatorFramework;
+
+#[cfg(feature = "handle-ctrlc")]
+pub mod signals;

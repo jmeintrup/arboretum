@@ -12,12 +12,12 @@ use crate::solver::{
     AlgorithmTypes, AtomSolver, AtomSolverType, LowerboundHeuristicType, UpperboundHeuristicType,
 };
 use crate::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
 use std::cmp::max;
-use std::collections::VecDeque;
-use std::hash::Hash;
+use std::collections::{HashSet, VecDeque};
+use std::hash::{BuildHasherDefault, Hash};
 use std::process::exit;
 use std::rc::Rc;
 
@@ -49,6 +49,7 @@ impl SeparationLevel {
 struct SearchState<'a> {
     graph: HashMapGraph,
     separation_level: SeparationLevel,
+    delayed_separation_levels: Vec<SeparationLevel>,
     lower_bound: Rc<Cell<usize>>,
     log_state: Rc<Cell<DecompositionInformation>>,
     upperbound_td: Option<TreeDecomposition>,
@@ -62,6 +63,7 @@ impl<'a> SearchState<'a> {
         Self {
             graph,
             separation_level: self.separation_level,
+            delayed_separation_levels: self.delayed_separation_levels.clone(),
             lower_bound: self.lower_bound.clone(),
             log_state: self.log_state.clone(),
             upperbound_td,
@@ -106,7 +108,7 @@ impl<'a> SearchState<'a> {
         return td;
     }
 
-    pub fn search(&mut self) -> TreeDecomposition {
+    pub fn search(mut self) -> TreeDecomposition {
         let lowerbound = {
             let tmp: &Cell<_> = self.lower_bound.borrow();
             tmp.get()
@@ -114,30 +116,58 @@ impl<'a> SearchState<'a> {
         if self.graph.order() <= lowerbound + 1 {
             return TreeDecomposition::with_root(self.graph.vertices().collect());
         }
+        #[cfg(feature = "handle-ctrlc")]
+        if crate::signals::received_ctrl_c() { // unknown lowerbound
+            return TreeDecomposition::with_root(self.graph.vertices().collect());
+        }
         while self.separation_level < SeparationLevel::MinorSafeClique {
-            if let Some(separator) = self.find_separator() {
-                println!("c found safe separator: {:?}", self.separation_level);
-                let mut log_state = self.log_state.get();
-                log_state.increment(self.separation_level);
-                self.log_state.set(log_state);
-                return self.process_separator(&separator);
-            } else {
-                self.separation_level = self.separation_level.increment().unwrap();
+            #[cfg(feature = "handle-ctrlc")]
+            if crate::signals::received_ctrl_c() { // unknown lowerbound
+                return TreeDecomposition::with_root(self.graph.vertices().collect());
+            }
+            match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
+                SeparatorSearchResult::Some(separator) => {
+                    println!("c found safe separator: {:?}", self.separation_level);
+                    let mut log_state = self.log_state.get();
+                    log_state.increment(self.separation_level);
+                    self.log_state.set(log_state);
+                    return self.process_separator(&separator);
+                }
+                SeparatorSearchResult::None => {
+                    self.separation_level = self.separation_level.increment().unwrap();
+                }
+                SeparatorSearchResult::Delayed => {
+                    if self.limits.check_again_before_atom {
+                        println!("c delaying separator search: {:?}", self.separation_level);
+                        self.delayed_separation_levels.push(self.separation_level);
+                    }
+                    self.separation_level = self.separation_level.increment().unwrap();
+                }
             }
         }
         if self.separation_level == SeparationLevel::MinorSafeClique
             && self.graph.order() < self.limits.minor_safe_separator
         {
-            if let Some(mut result) = self
-                .graph
-                .find_minor_safe_separator(self.upperbound_td.clone(), self.seed)
-            {
+            #[cfg(feature = "handle-ctrlc")]
+            if crate::signals::received_ctrl_c() { // unknown lowerbound
+                return TreeDecomposition::with_root(self.graph.vertices().collect());
+            }
+            if let Some(mut result) = self.graph.find_minor_safe_separator(
+                self.upperbound_td.clone(),
+                self.seed,
+                self.limits.minor_safe_separator_tries,
+                self.limits.minor_safe_separator_max_missing,
+            ) {
                 println!("c found safe separator: {:?}", self.separation_level);
                 let mut log_state = self.log_state.get();
                 log_state.increment(self.separation_level);
                 self.log_state.set(log_state);
 
                 let mut heuristic_td = result.tree_decomposition;
+                #[cfg(feature = "handle-ctrlc")]
+                if crate::signals::received_ctrl_c() {
+                    return  heuristic_td;
+                }
 
                 let separator = result.separator;
 
@@ -200,17 +230,38 @@ impl<'a> SearchState<'a> {
                 return td;
             }
         }
+        if self.limits.check_again_before_atom {
+            while let Some(separation_level) = self.delayed_separation_levels.pop() {
+                #[cfg(feature = "handle-ctrlc")]
+                if crate::signals::received_ctrl_c() { // unknown lowerbound
+                    return TreeDecomposition::with_root(self.graph.vertices().collect());
+                }
+                match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
+                    SeparatorSearchResult::Some(separator) => {
+                        println!("c found safe separator: {:?}", self.separation_level);
+                        let mut log_state = self.log_state.get();
+                        log_state.increment(self.separation_level);
+                        self.log_state.set(log_state);
+                        return self.process_separator(&separator);
+                    }
+                    _ => {}
+                }
+            }
+        }
         self.separation_level = SeparationLevel::Atomic;
+        #[cfg(feature = "handle-ctrlc")]
+        if crate::signals::received_ctrl_c() { // unknown lowerbound
+            return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
+        }
 
         let mut log_state = self.log_state.get();
         log_state.increment(self.separation_level);
         self.log_state.set(log_state);
-        //todo: add solver builder that returns a solver that is then called on the graph
-        /*let upperbound =
-        MinFillDecomposer::with_bounds(&self.graph, lowerbound, self.graph.order())
-            .compute()
-            .unwrap();*/
         let upperbound_td = self.algorithms.upperbound.compute(&self.graph, lowerbound);
+        #[cfg(feature = "handle-ctrlc")]
+        if crate::signals::received_ctrl_c() { // unknown lowerbound
+            return upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
+        }
         let upperbound = match &upperbound_td {
             None => self.graph.order() - 1,
             Some(td) => td.max_bag_size - 1,
@@ -238,6 +289,10 @@ impl<'a> SearchState<'a> {
             let tmp: &Cell<_> = self.lower_bound.borrow();
             tmp.get()
         };
+        #[cfg(feature = "handle-ctrlc")]
+        if crate::signals::received_ctrl_c() { // unknown lowerbound
+            return upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
+        }
         match self
             .algorithms
             .atom_solver
@@ -251,46 +306,71 @@ impl<'a> SearchState<'a> {
         }
     }
 
-    pub fn find_separator(&self) -> Option<FnvHashSet<usize>> {
-        match self.separation_level {
+    fn find_separator(
+        graph: &HashMapGraph,
+        limits: &SafeSeparatorLimits,
+        separation_level: &SeparationLevel,
+    ) -> SeparatorSearchResult {
+        match separation_level {
             SeparationLevel::Connected => {
-                if self.graph.order() < self.limits.size_one_separator {
-                    self.graph.find_safe_bi_connected_separator()
+                if graph.order() <= limits.size_one_separator {
+                    match graph.find_safe_bi_connected_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
                 } else {
-                    None
+                    SeparatorSearchResult::Delayed
                 }
             }
             SeparationLevel::BiConnected => {
-                if self.graph.order() < self.limits.size_two_separator {
-                    self.graph.find_safe_bi_connected_separator()
+                if graph.order() <= limits.size_two_separator {
+                    match graph.find_safe_bi_connected_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
                 } else {
-                    None
+                    SeparatorSearchResult::Delayed
                 }
             }
             SeparationLevel::TriConnected => {
-                if self.graph.order() < self.limits.size_three_separator {
-                    self.graph.find_safe_tri_connected_separator()
+                if graph.order() <= limits.size_three_separator {
+                    match graph.find_safe_tri_connected_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
                 } else {
-                    None
+                    SeparatorSearchResult::Delayed
                 }
             }
             SeparationLevel::Clique => {
-                if self.graph.order() < self.limits.clique_separator {
-                    self.graph.find_clique_minimal_separator()
+                if graph.order() <= limits.clique_separator {
+                    match graph.find_clique_minimal_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
                 } else {
-                    None
+                    SeparatorSearchResult::Delayed
                 }
             }
             SeparationLevel::AlmostClique => {
-                if self.graph.order() < self.limits.almost_clique_separator {
-                    self.graph.find_almost_clique_minimal_separator()
+                if graph.order() <= limits.almost_clique_separator {
+                    match graph.find_almost_clique_minimal_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
                 } else {
-                    None
+                    SeparatorSearchResult::Delayed
                 }
             }
-            _ => None,
+            _ => SeparatorSearchResult::None,
         }
     }
+}
+
+enum SeparatorSearchResult {
+    Some(FnvHashSet<usize>),
+    None,
+    Delayed,
 }
 
 #[derive(Clone, Copy)]
@@ -303,6 +383,7 @@ pub struct SafeSeparatorLimits {
     minor_safe_separator: usize,
     minor_safe_separator_max_missing: usize,
     minor_safe_separator_tries: usize,
+    check_again_before_atom: bool,
 }
 
 impl Default for SafeSeparatorLimits {
@@ -314,8 +395,9 @@ impl Default for SafeSeparatorLimits {
             clique_separator: usize::MAX,
             almost_clique_separator: 300,
             minor_safe_separator: usize::MAX,
-            minor_safe_separator_max_missing: usize::MAX,
+            minor_safe_separator_max_missing: 1_000,
             minor_safe_separator_tries: 25,
+            check_again_before_atom: false,
         }
     }
 }
@@ -374,6 +456,7 @@ impl SafeSeparatorFramework {
         let td = (SearchState {
             graph: graph.clone(),
             separation_level: SeparationLevel::Connected,
+            delayed_separation_levels: vec![],
             lower_bound: lowerbound.clone(),
             log_state: log_state.clone(),
             upperbound_td: None,

@@ -8,6 +8,8 @@ use fnv::{FnvHashMap, FnvHashSet};
 use rand::prelude::*;
 use std::cmp::max;
 use std::collections::HashMap;
+#[cfg(feature = "handle-ctrlc")]
+use crate::signals::received_ctrl_c;
 
 pub struct MinFillDegreeSelector {
     inner: MinFillSelector,
@@ -439,6 +441,11 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
                 break;
             }
 
+            #[cfg(feature = "handle-ctrlc")]
+            if crate::signals::received_ctrl_c() { // unknown lowerbound
+                break;
+            }
+
             if selector.graph().degree(u) > upperbound {
                 return Err(());
             }
@@ -525,6 +532,11 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
             break;
         }
 
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() { // simply adds all remaining vertices into a single bag
+            break;
+        }
+
         let mut nb: FnvHashSet<usize> = selector.graph().neighborhood(u).collect();
         max_bag = max(max_bag, nb.len() + 1);
         stack.push(u);
@@ -585,9 +597,9 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::graph::Graph;
-    use crate::graph::hash_map_graph::HashMapGraph;
-    use crate::graph::mutable_graph::MutableGraph;
+    use crate::graph::Graph;
+    use crate::graph::HashMapGraph;
+    use crate::graph::MutableGraph;
     use crate::heuristic_elimination_order::{DistanceTwoNeighbors, MinFillSelector, Selector};
     use crate::io::PaceReader;
     use fnv::FnvHashMap;
