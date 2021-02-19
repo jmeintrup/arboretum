@@ -33,15 +33,21 @@ if len(sys.argv) !=3:
     raise ValueError("provide directory to store results and directory to glob for files")
 root = sys.argv[1]
 grfiles = sys.argv[2]
-os.mkdir(root)
 
-log = open(root + "/log.txt", "w")
-stderr = open(root + "/err_log.txt", "w")
+if not os.path.exists(root):
+    os.mkdir(root)
 for file in glob(grfiles + "/he0*.gr"):
     base = os.path.basename(file)
     instance = os.path.splitext(base)[0]
 
     stdin = open(file, "r")
-    stdout = open(root + "/example.td", "w")
+    stdout = open(root + "/" + instance + ".td", "w")
+    log = open(root + "/" + instance + "_log.txt", "w")
+    stderr = open(root + "/" + instance + "_err_log.txt", "w")
+
     result, time = run_cmd(["./target/release/arboretum-cli", "--mode", "exact"], stdin, stdout, stderr)
     log.write(str(instance) + " " + str(result) + " " + str(time))
+    stdin.close()
+    stdout.close()
+    log.close()
+    stderr.close()
