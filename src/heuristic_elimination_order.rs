@@ -419,7 +419,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
 
     fn compute(self) -> Result<TreeDecomposition, ()> {
         #[cfg(feature = "log")]
-        info!("c computing heuristic elimination td");
+        info!(" computing heuristic elimination td");
         let mut tree_decomposition = TreeDecomposition::default();
         if self.selector.graph().order() <= self.lowerbound + 1 {
             tree_decomposition.add_bag(self.selector.graph().vertices().collect());
@@ -432,8 +432,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
         let mut selector = self.selector;
         let mut pq = BinaryQueue::new();
 
-        let mut bags: FnvHashMap<usize, FnvHashSet<usize>> = FnvHashMap::default();
-        let mut eliminated_at: FnvHashMap<usize, usize> = FnvHashMap::default();
+        let mut eliminated_in_bag: FnvHashMap<usize, usize> = FnvHashMap::default();
 
         for v in selector.graph().vertices() {
             pq.insert(v, selector.value(v))
@@ -449,7 +448,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
                 #[cfg(feature = "log")]
-                info!("c breaking heuristic elimination td due to ctrl+c");
+                info!(" breaking heuristic elimination td due to ctrl+c");
                 break;
             }
 
@@ -460,8 +459,9 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             let mut nb: FnvHashSet<usize> = selector.graph().neighborhood(u).collect();
             max_bag = max(max_bag, nb.len() + 1);
             stack.push(u);
-            bags.insert(u, nb.clone());
-            eliminated_at.insert(u, stack.len() - 1);
+            let mut bag = nb.clone();
+            bag.insert(u);
+            eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
             selector.eliminate_vertex(u);
 
             let tmp: Vec<_> = nb
@@ -482,15 +482,36 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
         }
 
         if selector.graph().order() > 0 {
+            let u = selector.graph().vertices().next().unwrap();
             let mut rest: FnvHashSet<usize> = selector.graph().vertices().collect();
-            let u = rest.iter().next().copied().unwrap();
-            rest.remove(&u);
-            bags.insert(u, rest);
+            let id = tree_decomposition.add_bag(rest);
+            eliminated_in_bag.insert(u, id);
             stack.push(u);
-            eliminated_at.insert(u, stack.len() - 1);
         }
 
-        for v in stack.iter().rev() {
+        for v in stack.iter() {
+            let bag_id = eliminated_in_bag.get(v).unwrap();
+
+            let mut neighbor: Option<usize> = None;
+            for u in tree_decomposition.bags[*bag_id].vertex_set.iter() {
+                let candidate_neighbor = &tree_decomposition.bags[*eliminated_in_bag.get(u).unwrap_or(&(tree_decomposition.bags.len() - 1))];
+                if candidate_neighbor.id == *bag_id {
+                    continue;
+                }
+                neighbor = {
+                    if neighbor.is_none() || neighbor.unwrap() > candidate_neighbor.id {
+                        Some(candidate_neighbor.id)
+                    } else {
+                        neighbor
+                    }
+                };
+            }
+            if let Some(neighbor) = neighbor {
+                tree_decomposition.add_edge(*bag_id, neighbor);
+            }
+        }
+
+        /*for v in stack.iter().rev() {
             let mut nb = bags.remove(v).unwrap();
             let old_bag_id = match tree_decomposition
                 .bags
@@ -511,7 +532,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
                     tree_decomposition.add_bag(nb);
                 }
             }
-        }
+        }*/
         Ok(tree_decomposition)
     }
 }
