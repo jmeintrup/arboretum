@@ -90,17 +90,17 @@ impl TreeDecomposition {
     fn remove_bag(&mut self, id: usize) {
         assert!(self.bags[id].neighbors.is_empty());
         if id == self.bags.len() - 1 {
-            //println!("c Only need to pop!");
+            //println!(" Only need to pop!");
             self.bags.pop();
         } else {
-            //println!("c Pre swap {} {:?}", id, self.bags[id]);
+            //println!(" Pre swap {} {:?}", id, self.bags[id]);
             let old_last = self.bags.swap_remove(id);
-            //println!("c Post swap {} {:?}", id, self.bags[id]);
+            //println!(" Post swap {} {:?}", id, self.bags[id]);
             assert!(old_last.neighbors.is_empty());
             self.bags[id].id = id;
             let old_last = self.bags.len();
             for neighbor in self.bags[id].neighbors.clone() {
-                //println!("c Neighbor {} {:?}", neighbor, self.bags[neighbor]);
+                //println!(" Neighbor {} {:?}", neighbor, self.bags[neighbor]);
                 assert_eq!(self.bags[neighbor].neighbors.remove(&old_last), true);
                 assert_eq!(self.bags[neighbor].neighbors.insert(id), true);
             }

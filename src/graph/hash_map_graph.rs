@@ -4,7 +4,7 @@ use crate::graph::mutable_graph::MutableGraph;
 use crate::heuristic_elimination_order::{
     HeuristicEliminationDecomposer, MinDegreeSelector, MinFillSelector, Selector,
 };
-use crate::tree_decomposition::TreeDecomposition;
+use crate::tree_decomposition::{TreeDecomposition, TreeDecompositionValidationError};
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
 use rand::prelude::{SliceRandom, StdRng, ThreadRng};

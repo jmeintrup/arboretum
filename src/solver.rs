@@ -8,7 +8,7 @@ use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::macros;
 use crate::rule_based_reducer::RuleBasedPreprocessor;
 use crate::safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits};
-use crate::tree_decomposition::TreeDecomposition;
+use crate::tree_decomposition::{TreeDecomposition, TreeDecompositionValidationError};
 #[cfg(feature = "log")]
 use log::info;
 use std::array;
@@ -233,11 +233,11 @@ impl Solver {
                     AtomSolverType::Custom(|graph, lowerbound, upperbound| {
                         if graph.order() <= 150 {
                             #[cfg(feature = "log")]
-                            info!("c Attempting to solve atom exactly");
+                            info!(" Attempting to solve atom exactly");
                             TamakiPid::with_bounds(graph, lowerbound, upperbound).compute()
                         } else {
                             #[cfg(feature = "log")]
-                            info!("c Atom too large to be solved exactly");
+                            info!(" Atom too large to be solved exactly");
                             Err(())
                         }
                     }),
@@ -302,7 +302,7 @@ impl Solver {
             let mut lowerbound = 0;
             let components = graph.connected_components();
             #[cfg(feature = "log")]
-            info!("c obtained {} components", components.len());
+            info!(" obtained {} components", components.len());
             if components.len() > 1 {
                 td.add_bag(Default::default());
             }
@@ -323,12 +323,12 @@ impl Solver {
 
                 let mut reducer: Option<_> = if self.apply_reduction_rules {
                     #[cfg(feature = "log")]
-                    info!("c applying reduction rules");
+                    info!(" applying reduction rules");
                     let mut tmp = RuleBasedPreprocessor::new(&sub_graph);
                     tmp.preprocess();
 
                     #[cfg(feature = "log")]
-                    info!("c reduced graph to: {}", tmp.graph().order());
+                    info!(" reduced graph to: {}", tmp.graph().order());
 
                     if tmp.graph().order() <= lowerbound + 1 {
                         td.combine_with_or_replace(0, tmp.into_td());
@@ -346,7 +346,7 @@ impl Solver {
                 lowerbound = max(lowerbound, new_lowerbound);
 
                 #[cfg(feature = "log")]
-                info!("c solving reduced graph");
+                info!(" solving reduced graph");
 
                 let mut result = SafeSeparatorFramework::default()
                     .algorithms(self.algorithm_types)
@@ -357,6 +357,16 @@ impl Solver {
                 partial_td.flatten();
                 if self.use_atom_bag_size_for_lowerbound {
                     lowerbound = max(lowerbound, partial_td.max_bag_size - 1);
+                }
+                match
+                    partial_td.verify(reduced_graph) {
+                    Ok(_) => {
+                        #[cfg(feature = "log")]
+                        info!(" partial td computed after reduction rules is valid!");
+                    }
+                    Err(e) => {
+                        panic!(" partial td computed after reduction rules is invalid: {}", e);
+                    }
                 }
                 match reducer {
                     None => td.combine_with_or_replace(0, partial_td),

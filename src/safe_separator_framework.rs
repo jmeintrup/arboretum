@@ -132,7 +132,7 @@ impl<'a> SearchState<'a> {
             match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
                 SeparatorSearchResult::Some(separator) => {
                     #[cfg(log)]
-                    info!("c found safe separator: {:?}", self.separation_level);
+                    info!(" found safe separator: {:?}", self.separation_level);
                     let mut log_state = self.log_state.get();
                     log_state.increment(self.separation_level);
                     self.log_state.set(log_state);
@@ -144,7 +144,7 @@ impl<'a> SearchState<'a> {
                 SeparatorSearchResult::Delayed => {
                     if self.limits.check_again_before_atom {
                         #[cfg(feature = "log")]
-                        info!("c delaying separator search: {:?}", self.separation_level);
+                        info!(" delaying separator search: {:?}", self.separation_level);
                         self.delayed_separation_levels.push(self.separation_level);
                     }
                     self.separation_level = self.separation_level.increment().unwrap();
@@ -152,14 +152,14 @@ impl<'a> SearchState<'a> {
             }
         }
         #[cfg(feature = "log")]
-        info!("c searching for minor safe");
+        info!(" searching for minor safe");
         if self.separation_level == SeparationLevel::MinorSafeClique
             && self.graph.order() < self.limits.minor_safe_separator
         {
             #[cfg(feature = "handle-ctrlc")]
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
-                return TreeDecomposition::with_root(self.graph.vertices().collect());
+                return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
             }
             if let Some(mut result) = self.graph.find_minor_safe_separator(
                 self.upperbound_td.clone(),
@@ -168,7 +168,7 @@ impl<'a> SearchState<'a> {
                 self.limits.minor_safe_separator_max_missing,
             ) {
                 #[cfg(feature = "log")]
-                info!("c found safe separator: {:?}", self.separation_level);
+                info!(" found safe separator: {:?}", self.separation_level);
                 let mut log_state = self.log_state.get();
                 log_state.increment(self.separation_level);
                 self.log_state.set(log_state);
@@ -245,12 +245,12 @@ impl<'a> SearchState<'a> {
                 #[cfg(feature = "handle-ctrlc")]
                 if crate::signals::received_ctrl_c() {
                     // unknown lowerbound
-                    return TreeDecomposition::with_root(self.graph.vertices().collect());
+                    return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
                 }
                 match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
                     SeparatorSearchResult::Some(separator) => {
                         #[cfg(feature = "log")]
-                        info!("c found safe separator: {:?}", self.separation_level);
+                        info!(" found safe separator: {:?}", self.separation_level);
                         let mut log_state = self.log_state.get();
                         log_state.increment(self.separation_level);
                         self.log_state.set(log_state);
@@ -261,7 +261,7 @@ impl<'a> SearchState<'a> {
             }
         }
         #[cfg(feature = "log")]
-        info!("c solving atom");
+        info!(" solving atom");
         self.separation_level = SeparationLevel::Atomic;
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
@@ -275,14 +275,17 @@ impl<'a> SearchState<'a> {
         log_state.increment(self.separation_level);
         self.log_state.set(log_state);
         #[cfg(feature = "log")]
-        info!("c computing upperbound_td");
+        info!(" computing upperbound_td");
         let upperbound_td = self.algorithms.upperbound.compute(&self.graph, lowerbound);
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
             // unknown lowerbound
-            return upperbound_td.unwrap_or(TreeDecomposition::with_root(
-                self.graph.vertices().collect(),
-            ));
+            return match upperbound_td {
+                Some(td) => td,
+                None => {
+                    self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()))
+                }
+            };
         }
         let upperbound = match &upperbound_td {
             None => self.graph.order() - 1,
@@ -327,7 +330,7 @@ impl<'a> SearchState<'a> {
         {
             Ok(td) => td,
             Err(_) => match upperbound_td {
-                None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                None => self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect())),
                 Some(td) => td,
             },
         }
