@@ -29,14 +29,15 @@ def run_cmd(cmd, stdin, stdout, stderr, timeout=1800, poll_interval=1, sigint_gr
 
 
 
-if len(sys.argv) !=2:
-    raise ValueError("provide directory to store results")
+if len(sys.argv) !=3:
+    raise ValueError("provide directory to store results and directory to glob for files")
 root = sys.argv[1]
+grfiles = sys.argv[2]
 os.mkdir(root)
 
 log = open(root + "/log.txt", "w")
 stderr = open(root + "/err_log.txt", "w")
-for file in glob("~/Treewidth-PACE-2017-instances/gr/heuristic/he0*.gr"):
+for file in glob(grfiles + "/he0*.gr"):
     base = os.path.basename(file)
     instance = os.path.splitext(base)[0]
 
