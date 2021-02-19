@@ -31,7 +31,7 @@ def run_cmd(cmd, stdin, stdout, stderr, timeout=1800, poll_interval=1, sigint_gr
 
 if len(sys.argv) !=2:
     raise ValueError("provide directory to store results")
-root = sys.argv
+root = sys.argv[1]
 os.mkdir(root)
 
 log = open(root + "/log.txt", "w")
