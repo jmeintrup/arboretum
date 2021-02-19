@@ -4,3 +4,4 @@ data/
 pace-instances/
 perf*
 .idea/
+venv/
