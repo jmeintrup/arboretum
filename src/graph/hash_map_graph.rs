@@ -2,17 +2,15 @@ use crate::datastructures::BitSet;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::heuristic_elimination_order::{
-    HeuristicEliminationDecomposer, MinDegreeSelector, MinFillSelector, Selector,
+    HeuristicEliminationDecomposer, MinDegreeSelector, MinFillSelector,
 };
-use crate::tree_decomposition::{TreeDecomposition, TreeDecompositionValidationError};
+use crate::tree_decomposition::{TreeDecomposition};
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
-use rand::prelude::{SliceRandom, StdRng, ThreadRng};
+use rand::prelude::{SliceRandom, StdRng};
 use rand::{Rng, SeedableRng};
 use std::cmp::{max, min, Ordering};
-use std::collections::{HashSet, VecDeque};
-use std::convert::TryFrom;
-use std::io::BufRead;
+use std::collections::{VecDeque};
 use std::iter::FromIterator;
 
 #[cfg(feature = "handle-ctrlc")]
@@ -432,40 +430,6 @@ impl HashMapGraph {
         self.clique_minimal_separator_helper(&empty)
     }
 
-    fn closed_neighborhood_helper(
-        &self,
-        component: &FnvHashSet<usize>,
-        separator: &FnvHashSet<usize>,
-    ) -> FnvHashSet<usize> {
-        if component.is_empty() || separator.is_empty() || self.data.is_empty() {
-            return FnvHashSet::default();
-        }
-        let mut closed_neighborhood: FnvHashSet<_> = FnvHashSet::default();
-
-        let mut stack: Vec<_> = Vec::with_capacity(component.len());
-        let mut visited: FnvHashSet<_> = FnvHashSet::with_capacity_and_hasher(
-            component.len() + separator.len(),
-            Default::default(),
-        );
-        let first = component.iter().copied().next().unwrap();
-        stack.push(first);
-        visited.insert(first);
-
-        while let Some(v) = stack.pop() {
-            for x in self.data.get(&v).unwrap().iter() {
-                if visited.contains(x) {
-                    continue;
-                }
-                if separator.contains(x) {
-                    closed_neighborhood.insert(*x);
-                    visited.insert(*x);
-                }
-                stack.push(*x);
-            }
-        }
-        closed_neighborhood
-    }
-
     fn clique_minimal_separator_helper(
         &self,
         ignore: &FnvHashSet<usize>,
@@ -820,7 +784,7 @@ impl Graph for HashMapGraph {
                 }
             }
         }
-        (check.is_none() && check.unwrap().len() == 1)
+        check.is_none() && check.unwrap().len() == 1
     }
 
     fn vertices(&self) -> Box<dyn Iterator<Item = usize> + '_> {

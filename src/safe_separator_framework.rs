@@ -1,23 +1,14 @@
-use crate::exact::TamakiPid;
 use crate::graph::Graph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::heuristic_elimination_order::{
-    HeuristicEliminationDecomposer, MinFillDecomposer, MinFillSelector,
-};
-use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::macros;
 use crate::solver::{
-    AlgorithmTypes, AtomSolver, AtomSolverType, LowerboundHeuristicType, UpperboundHeuristicType,
+    AlgorithmTypes
 };
-use crate::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
-use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::{Cell, RefCell};
+use crate::tree_decomposition::{TreeDecomposition};
+use fnv::{FnvHashMap, FnvHashSet};
+use std::borrow::{Borrow};
+use std::cell::{Cell};
 use std::cmp::max;
-use std::collections::{HashSet, VecDeque};
-use std::hash::{BuildHasherDefault, Hash};
-use std::process::exit;
 use std::rc::Rc;
 
 #[cfg(feature = "log")]
@@ -97,13 +88,13 @@ impl<'a> SearchState<'a> {
         let mut td = TreeDecomposition::default();
         let root = td.add_bag(separator.clone());
         if td.max_bag_size > 0 {
-            let lb: &Cell<_> = self.lower_bound.borrow();
+            let lb: &Cell<_> = &self.lower_bound;
             lb.set(max(lb.get(), td.max_bag_size - 1));
         }
         for cc in self.graph.separate(&separator).iter() {
-            let mut graph = self.graph_from_cc(cc, separator);
+            let graph = self.graph_from_cc(cc, separator);
 
-            let mut search_sate = self.fork(graph, None);
+            let search_sate = self.fork(graph, None);
             let partial = search_sate.search();
             td.combine_with(root, partial);
         }
@@ -112,7 +103,7 @@ impl<'a> SearchState<'a> {
 
     pub fn search(mut self) -> TreeDecomposition {
         let lowerbound = {
-            let tmp: &Cell<_> = self.lower_bound.borrow();
+            let tmp: &Cell<_> = &self.lower_bound;
             tmp.get()
         };
         if self.graph.order() <= lowerbound + 1 {
@@ -161,7 +152,7 @@ impl<'a> SearchState<'a> {
                 // unknown lowerbound
                 return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
             }
-            if let Some(mut result) = self.graph.find_minor_safe_separator(
+            if let Some(result) = self.graph.find_minor_safe_separator(
                 self.upperbound_td.clone(),
                 self.seed,
                 self.limits.minor_safe_separator_tries,
@@ -173,7 +164,7 @@ impl<'a> SearchState<'a> {
                 log_state.increment(self.separation_level);
                 self.log_state.set(log_state);
 
-                let mut heuristic_td = result.tree_decomposition;
+                let heuristic_td = result.tree_decomposition;
                 #[cfg(feature = "handle-ctrlc")]
                 if crate::signals::received_ctrl_c() {
                     return heuristic_td;
@@ -184,12 +175,11 @@ impl<'a> SearchState<'a> {
                 let mut td = TreeDecomposition::default();
                 let root = td.add_bag(separator.clone());
                 if td.max_bag_size > 0 {
-                    let lb: &Cell<_> = self.lower_bound.borrow();
+                    let lb: &Cell<_> = &self.lower_bound;
                     lb.set(max(lb.get(), td.max_bag_size - 1));
                 }
-                let components = self.graph.separate(&separator);
                 for cc in self.graph.separate(&separator) {
-                    let mut graph = self.graph_from_cc(&cc, &separator);
+                    let graph = self.graph_from_cc(&cc, &separator);
 
                     let full_vertex_set: FnvHashSet<_> = graph.vertices().collect();
 
@@ -216,7 +206,7 @@ impl<'a> SearchState<'a> {
                             .collect();
                     }
                     if partial_heuristic_bags.len() == 0 {
-                        let mut search_sate = self.fork(graph, None);
+                        let search_sate = self.fork(graph, None);
 
                         let partial = search_sate.search();
                         td.combine_with(root, partial);
@@ -231,7 +221,7 @@ impl<'a> SearchState<'a> {
                             root: Some(0),
                             max_bag_size,
                         };
-                        let mut search_sate = self.fork(graph, Some(upperbound_td));
+                        let search_sate = self.fork(graph, Some(upperbound_td));
 
                         let partial = search_sate.search();
                         td.combine_with(root, partial);
@@ -241,7 +231,7 @@ impl<'a> SearchState<'a> {
             }
         }
         if self.limits.check_again_before_atom {
-            while let Some(separation_level) = self.delayed_separation_levels.pop() {
+            while !self.delayed_separation_levels.is_empty() {
                 #[cfg(feature = "handle-ctrlc")]
                 if crate::signals::received_ctrl_c() {
                     // unknown lowerbound
@@ -256,7 +246,9 @@ impl<'a> SearchState<'a> {
                         self.log_state.set(log_state);
                         return self.process_separator(&separator);
                     }
-                    _ => {}
+                    _ => {
+                        self.delayed_separation_levels.pop();
+                    }
                 }
             }
         }
@@ -273,6 +265,7 @@ impl<'a> SearchState<'a> {
 
         let mut log_state = self.log_state.get();
         log_state.increment(self.separation_level);
+        log_state.set_max_atom(self.graph.order());
         self.log_state.set(log_state);
         #[cfg(feature = "log")]
         info!(" computing upperbound_td");
@@ -506,7 +499,7 @@ impl SafeSeparatorFramework {
     impl_setter!(self, safe_separator_limits, SafeSeparatorLimits);
     impl_setter!(self, algorithms, AlgorithmTypes);
 
-    pub fn compute(mut self, graph: &HashMapGraph, lowerbound: usize) -> DecompositionResult {
+    pub fn compute(self, graph: &HashMapGraph, lowerbound: usize) -> DecompositionResult {
         let lowerbound = Rc::new(Cell::new(lowerbound));
         let log_state = Rc::new(Cell::new(DecompositionInformation::default()));
         let limits = self.safe_separator_limits;
@@ -570,8 +563,8 @@ impl DecompositionInformation {
         }
     }
 
-    fn set_max_atom(&mut self, max_atom: usize) {
-        self.max_atom = max_atom;
+    fn set_max_atom(&mut self, candidate: usize) {
+        self.max_atom = max(self.max_atom, candidate);
     }
 }
 

@@ -1,5 +1,3 @@
-#![allow(unused)]
-#![allow(dead_code)]
 #[macro_use]
 pub(crate) mod macros {
     macro_rules! impl_setter {
@@ -13,7 +11,6 @@ pub(crate) mod macros {
 }
 
 pub(crate) mod datastructures;
-pub(crate) use datastructures::{BinaryQueue, BitSet, BitSetIterator};
 
 pub mod exact;
 pub mod graph;

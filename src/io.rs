@@ -23,8 +23,8 @@ impl<'a, 'b: 'a, T: Write> PaceWriter<'a, 'b, T> {
             bag_count,
             max_bag,
             self.graph.order()
-        );
-        self.tree_decomposition.bags().iter().for_each(|b| {
+        )?;
+        for b in self.tree_decomposition.bags() {
             let mut tmp: Vec<_> = b.vertex_set.iter().copied().collect();
             tmp.sort();
             let vertices: Vec<_> = tmp.iter().map(|i| (i + 1).to_string()).collect();
@@ -33,13 +33,13 @@ impl<'a, 'b: 'a, T: Write> PaceWriter<'a, 'b, T> {
                 acc.push_str(" ");
                 acc
             });
-            writeln!(self.writer, "b {} {}", b.id + 1, vertices);
-        });
-        self.tree_decomposition.bags().iter().for_each(|b| {
+            writeln!(self.writer, "b {} {}", b.id + 1, vertices)?;
+        }
+        for b in self.tree_decomposition.bags() {
             for child in b.neighbors.iter().copied().filter(|i| *i > b.id) {
-                writeln!(self.writer, "{} {}", b.id + 1, child + 1);
+                writeln!(self.writer, "{} {}", b.id + 1, child + 1)?;
             }
-        });
+        }
         Ok(())
     }
 

@@ -1,18 +1,11 @@
-use crate::exact::TamakiPid;
 use crate::graph::Graph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::solver::AtomSolver;
-use crate::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
-use fnv::{FnvHashMap, FnvHashSet};
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::{Cell, RefCell};
+use crate::tree_decomposition::{TreeDecomposition};
+use fnv::{FnvHashSet};
+use std::borrow::{BorrowMut};
 use std::cmp::max;
 use std::collections::VecDeque;
-use std::hash::Hash;
-use std::process::exit;
-use std::rc::Rc;
 
 #[cfg(feature = "handle-ctrlc")]
 use crate::signals::received_ctrl_c;
@@ -29,8 +22,6 @@ struct Cube {
     a: usize,
     b: usize,
     c: usize,
-    x: usize,
-    y: usize,
     z: usize,
     v: usize,
 }
@@ -69,14 +60,12 @@ impl RuleBasedPreprocessor {
 
     pub fn combine_into_td(
         mut self,
-        mut td: TreeDecomposition,
-        graph: &HashMapGraph,
+        td: TreeDecomposition,
     ) -> TreeDecomposition {
         let mut vertices = FnvHashSet::default();
         for bag in &td.bags {
             vertices.extend(bag.vertex_set.iter().copied())
         }
-        let tmp = self.stack.clone();
         self.stack.push(vertices);
         self.process_stack();
         self.partial_tree_decomposition.flatten();
@@ -265,8 +254,6 @@ impl RuleBasedPreprocessor {
                 a,
                 b,
                 c,
-                x,
-                y,
                 z,
                 v,
             });

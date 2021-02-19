@@ -1,20 +1,16 @@
 use crate::exact::TamakiPid;
 use crate::graph::{Graph, HashMapGraph};
 use crate::heuristic_elimination_order::{
-    HeuristicEliminationDecomposer, MinDegreeDecomposer, MinDegreeSelector, MinFillDecomposer,
-    MinFillDegree, MinFillDegreeSelector, MinFillSelector, Selector,
+    HeuristicEliminationDecomposer, MinDegreeSelector,
+    MinFillDegreeSelector, MinFillSelector, Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::macros;
 use crate::rule_based_reducer::RuleBasedPreprocessor;
 use crate::safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits};
-use crate::tree_decomposition::{TreeDecomposition, TreeDecompositionValidationError};
+use crate::tree_decomposition::{TreeDecomposition};
 #[cfg(feature = "log")]
 use log::info;
-use std::array;
 use std::cmp::max;
-use std::hash::Hash;
-use std::process::exit;
 
 pub trait DynamicUpperboundHeuristic: AtomSolver {}
 impl<S: Selector> DynamicUpperboundHeuristic for HeuristicEliminationDecomposer<S> {}
@@ -321,7 +317,7 @@ impl Solver {
                 }
                 lowerbound = max(lowerbound, 1);
 
-                let mut reducer: Option<_> = if self.apply_reduction_rules {
+                let reducer: Option<_> = if self.apply_reduction_rules {
                     #[cfg(feature = "log")]
                     info!(" applying reduction rules");
                     let mut tmp = RuleBasedPreprocessor::new(&sub_graph);
@@ -348,7 +344,7 @@ impl Solver {
                 #[cfg(feature = "log")]
                 info!(" solving reduced graph");
 
-                let mut result = SafeSeparatorFramework::default()
+                let result = SafeSeparatorFramework::default()
                     .algorithms(self.algorithm_types)
                     .safe_separator_limits(self.safe_separator_limits)
                     .compute(reduced_graph, lowerbound);
@@ -372,7 +368,7 @@ impl Solver {
                     None => td.combine_with_or_replace(0, partial_td),
                     Some(reducer) => td.combine_with_or_replace(
                         0,
-                        reducer.combine_into_td(partial_td, &sub_graph),
+                        reducer.combine_into_td(partial_td),
                     ),
                 };
             }

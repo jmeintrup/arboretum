@@ -1,13 +1,11 @@
 use bitvec::prelude::*;
 use core::mem;
 use fnv::FnvHashMap;
-use num::{Integer, Num, NumCast, ToPrimitive};
+use num::{NumCast, ToPrimitive};
 use std::cmp::Ordering;
-use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::mem::size_of;
-use std::ops::{AddAssign, Div, Index, IndexMut};
+use std::ops::{AddAssign, Div, Index};
 use std::{fmt, iter};
 
 #[derive(Clone, Default)]
@@ -306,12 +304,12 @@ impl BitSet {
     }
 
     #[inline]
-    pub fn get_next_set(&self, mut idx: usize) -> Option<usize> {
+    pub fn get_next_set(&self, idx: usize) -> Option<usize> {
         if idx >= self.bit_vec.len() {
             return None;
         }
         let mut block_idx = idx / block_size();
-        let mut word_idx = idx % block_size();
+        let word_idx = idx % block_size();
         let mut block = self.bit_vec.as_slice()[block_idx];
         let max = self.bit_vec.as_slice().len();
         block &= usize::MAX << word_idx;
@@ -451,23 +449,6 @@ impl BinaryQueue {
             values: FnvHashMap::default(),
             indices: FnvHashMap::default(),
         }
-    }
-
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            heap: Vec::with_capacity(capacity),
-            values: FnvHashMap::with_capacity_and_hasher(capacity, Default::default()),
-            indices: FnvHashMap::with_capacity_and_hasher(capacity, Default::default()),
-        }
-    }
-
-    pub fn remove(&mut self, k: usize) {
-        assert!(self.values.contains_key(&k));
-        if !k == 0 {
-            let v = *self.values.get(&self.heap[0]).unwrap() - 1;
-            self.insert(k, v);
-        }
-        self.pop_min();
     }
 
     pub fn insert(&mut self, element: usize, priority: i64) {

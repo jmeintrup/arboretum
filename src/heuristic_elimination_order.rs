@@ -5,13 +5,11 @@ use crate::graph::MutableGraph;
 #[cfg(feature = "handle-ctrlc")]
 use crate::signals::received_ctrl_c;
 use crate::solver::AtomSolver;
-use crate::tree_decomposition::{Bag, TreeDecomposition};
+use crate::tree_decomposition::{TreeDecomposition};
 use fnv::{FnvHashMap, FnvHashSet};
 #[cfg(feature = "log")]
 use log::info;
-use rand::prelude::*;
 use std::cmp::max;
-use std::collections::HashMap;
 
 pub struct MinFillDegreeSelector {
     inner: MinFillSelector,
@@ -156,16 +154,6 @@ impl MinFillSelector {
         }
     }
 
-    fn eliminate_vertex_v2(&mut self, v: usize) {
-        if self.fill_in_count(v) == 0 {
-            self.eliminate_fill0(v);
-        } else {
-            let mut close_neighborhood = DistanceTwoNeighbors::new(&self.graph, v);
-            let mut disjoint_neighborhood = DisjointNeighborhood::new(&self.graph, v);
-            self.update_cache(v, close_neighborhood, disjoint_neighborhood);
-        }
-    }
-
     fn eliminate_fill0(&mut self, u: usize) {
         if self.graph.degree(u) > 1 {
             let delta = self.graph.degree(u) - 1;
@@ -181,202 +169,6 @@ impl MinFillSelector {
     fn fill_in_count(&self, u: usize) -> usize {
         let deg = self.graph.degree(u);
         (deg * deg - deg) / 2 - self.cache.get(&u).unwrap()
-    }
-
-    fn update_cache(
-        &mut self,
-        v: usize,
-        close_neighborhood: DistanceTwoNeighbors,
-        disjoint_neighborhood: DisjointNeighborhood,
-    ) {
-        let mut tmp = FnvHashMap::default();
-        for u in self.graph.neighborhood_set(v).iter().copied() {
-            if !disjoint_neighborhood
-                .unaffected_neighbors
-                .get(&u)
-                .unwrap()
-                .is_empty()
-            {
-                let fill_in_count = if !disjoint_neighborhood
-                    .neighbors_to_be
-                    .get(&u)
-                    .unwrap()
-                    .is_empty()
-                {
-                    let init = sqr_no_self_loop(
-                        disjoint_neighborhood.neighbors_to_be.get(&u).unwrap().len(),
-                    ) + self.fill_in_count(u);
-                    let mut fill_in_count = disjoint_neighborhood
-                        .neighbors_to_be
-                        .get(&u)
-                        .unwrap()
-                        .iter()
-                        .fold(init, |init, w| {
-                            let a = disjoint_neighborhood.unaffected_neighbors.get(&u).unwrap();
-                            let b = disjoint_neighborhood.unaffected_neighbors.get(&w).unwrap();
-                            let intersection_count = a.intersection(b).count();
-                            init - intersection_count
-                        });
-                    if !disjoint_neighborhood
-                        .existing_neighbors
-                        .get(&u)
-                        .unwrap()
-                        .is_empty()
-                    {
-                        let mut count = sqr_no_self_loop(
-                            disjoint_neighborhood
-                                .existing_neighbors
-                                .get(&u)
-                                .unwrap()
-                                .len(),
-                        ) / 2;
-                        for x in disjoint_neighborhood.existing_neighbors.get(&u).unwrap() {
-                            for y in disjoint_neighborhood
-                                .existing_neighbors
-                                .get(&u)
-                                .unwrap()
-                                .iter()
-                                .filter(|y| x < *y)
-                            {
-                                if self.graph.has_edge(*x, *y) {
-                                    count -= 1;
-                                }
-                            }
-                        }
-                        fill_in_count -= count;
-                    }
-                    fill_in_count
-                } else {
-                    let init = self.fill_in_count(u)
-                        - disjoint_neighborhood
-                            .unaffected_neighbors
-                            .get(&u)
-                            .unwrap()
-                            .len();
-                    disjoint_neighborhood
-                        .existing_neighbors
-                        .get(&u)
-                        .unwrap()
-                        .iter()
-                        .fold(init, |init, w| {
-                            let a = disjoint_neighborhood.existing_neighbors.get(&u).unwrap();
-                            let b = disjoint_neighborhood.neighbors_to_be.get(&w).unwrap();
-                            let intersection_count = a.intersection(b).filter(|x| x > &w).count();
-                            init - intersection_count
-                        })
-                };
-                let v = sqr_no_self_loop(disjoint_neighborhood.len()) / 2;
-                tmp.insert(u, v - fill_in_count);
-            } else {
-                let len = disjoint_neighborhood
-                    .existing_neighbors
-                    .get(&u)
-                    .unwrap()
-                    .len()
-                    + disjoint_neighborhood.neighbors_to_be.get(&u).unwrap().len();
-                let v = sqr_no_self_loop(len) / 2;
-                tmp.insert(u, v);
-            }
-        }
-
-        for u in close_neighborhood.0 {
-            let intersection: Vec<usize> = self
-                .graph
-                .neighborhood_set(v)
-                .intersection(self.graph.neighborhood_set(u))
-                .copied()
-                .collect();
-            let mut increment_by = 0;
-            for x in intersection.iter().copied() {
-                increment_by += intersection
-                    .iter()
-                    .copied()
-                    .filter(|y| x < *y && !self.graph.has_edge(x, *y))
-                    .count();
-            }
-            tmp.insert(u, self.cache.get(&u).unwrap() + increment_by);
-        }
-        for (key, value) in tmp {
-            *self.cache.get_mut(&key).unwrap() = value;
-        }
-        self.graph.eliminate_vertex(v);
-    }
-}
-
-const fn sqr_no_self_loop(i: usize) -> usize {
-    i * (i - 1)
-}
-
-struct DisjointNeighborhood {
-    neighbors_to_be: FnvHashMap<usize, FnvHashSet<usize>>,
-    existing_neighbors: FnvHashMap<usize, FnvHashSet<usize>>,
-    unaffected_neighbors: FnvHashMap<usize, FnvHashSet<usize>>,
-}
-
-impl DisjointNeighborhood {
-    fn len(&self) -> usize {
-        self.existing_neighbors.len() + self.neighbors_to_be.len() + self.unaffected_neighbors.len()
-    }
-
-    fn new(graph: &HashMapGraph, v: usize) -> Self {
-        let capacity = graph.neighborhood_set(v).len();
-        let mut neighbors_to_be =
-            FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
-        let mut existing_neighbors =
-            FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
-        let mut unaffected_neighbors =
-            FnvHashMap::with_capacity_and_hasher(capacity, Default::default());
-        graph.neighborhood_set(v).iter().copied().for_each(|u| {
-            neighbors_to_be.insert(u, FnvHashSet::default());
-            existing_neighbors.insert(u, FnvHashSet::default());
-            unaffected_neighbors.insert(u, FnvHashSet::default());
-        });
-
-        for u in graph.neighborhood_set(v).iter().copied() {
-            for w in graph
-                .neighborhood_set(u)
-                .iter()
-                .copied()
-                .filter(|w| u != *w)
-            {
-                if graph.neighborhood_set(v).contains(&w) {
-                    existing_neighbors.get_mut(&u).unwrap().insert(w);
-                } else {
-                    unaffected_neighbors.get_mut(&u).unwrap().insert(w);
-                }
-            }
-            for u2 in graph.neighborhood_set(v).iter().copied() {
-                if u2 != u && !graph.has_edge(u, u2) {
-                    neighbors_to_be.get_mut(&u).unwrap().insert(u2);
-                }
-            }
-        }
-
-        Self {
-            neighbors_to_be,
-            existing_neighbors,
-            unaffected_neighbors,
-        }
-    }
-}
-
-struct DistanceTwoNeighbors(FnvHashSet<usize>);
-
-impl DistanceTwoNeighbors {
-    fn new(graph: &HashMapGraph, v: usize) -> Self {
-        DistanceTwoNeighbors(
-            graph
-                .neighborhood_set(v)
-                .iter()
-                .flat_map(|u| {
-                    graph
-                        .neighborhood_set(*u)
-                        .iter()
-                        .filter(move |w| u < *w && !graph.neighborhood_set(v).contains(w))
-                })
-                .copied()
-                .collect(),
-        )
     }
 }
 
@@ -456,7 +248,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
                 return Err(());
             }
 
-            let mut nb: FnvHashSet<usize> = selector.graph().neighborhood(u).collect();
+            let nb: FnvHashSet<usize> = selector.graph().neighborhood(u).collect();
             max_bag = max(max_bag, nb.len() + 1);
             stack.push(u);
             let mut bag = nb.clone();
@@ -464,11 +256,11 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
             selector.eliminate_vertex(u);
 
-            let tmp: Vec<_> = nb
+            /*let tmp: Vec<_> = nb
                 .iter()
                 .copied()
                 .filter(|u| selector.graph().neighborhood_set(*u).len() < nb.len())
-                .collect();
+                .collect();*/
 
             // eliminate directly, as these are subsets of the current bag
             /*for u in tmp {
@@ -483,7 +275,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
 
         if selector.graph().order() > 0 {
             let u = selector.graph().vertices().next().unwrap();
-            let mut rest: FnvHashSet<usize> = selector.graph().vertices().collect();
+            let rest: FnvHashSet<usize> = selector.graph().vertices().collect();
             let id = tree_decomposition.add_bag(rest);
             eliminated_in_bag.insert(u, id);
             stack.push(u);

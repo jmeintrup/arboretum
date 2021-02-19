@@ -1,13 +1,9 @@
 use crate::datastructures::BitSet;
 use crate::graph::Graph;
-use crate::graph::HashMapGraph;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::cmp::max;
-use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::process::id;
-use std::rc::Rc;
 
 pub enum TreeDecompositionValidationError {
     HasCycle,
@@ -195,7 +191,7 @@ impl TreeDecomposition {
             self.bags.push(bag)
         }
 
-        for (id, separator) in separators {
+        for (_, separator) in separators {
             let new_neighbor = self.bags[offset..]
                 .iter_mut()
                 .find(|b| b.vertex_set.is_superset(&separator))
@@ -217,12 +213,12 @@ impl TreeDecomposition {
             b.neighbors = b.neighbors.iter().map(|i| *i + offset).collect();
         });
         for neighbor_of_target_bag in neighbors_of_target_bag {
-            let mut neighbor_of_target_bag = &mut self.bags[neighbor_of_target_bag];
+            let neighbor_of_target_bag = &mut self.bags[neighbor_of_target_bag];
             let intersection: FnvHashSet<_> = vertices_of_target_bag
                 .intersection(&neighbor_of_target_bag.vertex_set)
                 .copied()
                 .collect();
-            let mut new_neighbor_of_neighbor_of_target_bag = td
+            let new_neighbor_of_neighbor_of_target_bag = td
                 .bags
                 .iter_mut()
                 .find(|b| b.vertex_set.is_superset(&intersection))
@@ -255,7 +251,7 @@ impl TreeDecomposition {
         &self.bags
     }
 
-    pub fn combine_with_or_replace(&mut self, glue_point: usize, mut other: TreeDecomposition) {
+    pub fn combine_with_or_replace(&mut self, glue_point: usize, other: TreeDecomposition) {
         if self.bags.len() == 0 || (self.bags.len() == 1 && self.bags[0].vertex_set.is_empty()) {
             *self = other;
         } else {

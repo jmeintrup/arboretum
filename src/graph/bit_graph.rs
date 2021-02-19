@@ -1,18 +1,9 @@
 use crate::datastructures::BitSet;
 use crate::graph::graph::Graph;
-use fnv::{FnvHashMap, FnvHashSet};
-use std::borrow::{Borrow, BorrowMut};
+use fnv::{FnvHashMap};
+use std::borrow::{Borrow};
 use std::cmp::Ordering;
-use std::collections::hash_map::Entry::{Occupied, Vacant};
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::fmt;
-use std::fmt::{Display, Formatter};
-use std::io::BufRead;
 
-pub type EBCache = HashMap<BitSet, BitSet>;
-pub type CCCache = HashMap<BitSet, Vec<BitSet>>;
-pub type PMCCache = HashMap<BitSet, bool>;
 #[derive(Clone, Debug)]
 pub struct BitGraph {
     graph: Vec<BitSet>,
