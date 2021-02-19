@@ -5,8 +5,10 @@ use crate::graph::MutableGraph;
 #[cfg(feature = "handle-ctrlc")]
 use crate::signals::received_ctrl_c;
 use crate::solver::AtomSolver;
-use crate::tree_decomposition::TreeDecomposition;
+use crate::tree_decomposition::{Bag, TreeDecomposition};
 use fnv::{FnvHashMap, FnvHashSet};
+#[cfg(feature = "log")]
+use log::info;
 use rand::prelude::*;
 use std::cmp::max;
 use std::collections::HashMap;
@@ -416,6 +418,8 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
     }
 
     fn compute(self) -> Result<TreeDecomposition, ()> {
+        #[cfg(feature = "log")]
+        info!("c computing heuristic elimination td");
         let mut tree_decomposition = TreeDecomposition::default();
         if self.selector.graph().order() <= self.lowerbound + 1 {
             tree_decomposition.add_bag(self.selector.graph().vertices().collect());
@@ -444,6 +448,8 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             #[cfg(feature = "handle-ctrlc")]
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
+                #[cfg(feature = "log")]
+                info!("c breaking heuristic elimination td due to ctrl+c");
                 break;
             }
 
@@ -509,7 +515,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
         Ok(tree_decomposition)
     }
 }
-
+/*
 pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> TreeDecomposition {
     let mut tree_decomposition = TreeDecomposition::default();
     if graph.order() <= 2 {
@@ -595,7 +601,7 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
         }
     }
     tree_decomposition
-}
+}*/
 
 #[cfg(test)]
 mod tests {
@@ -657,7 +663,6 @@ mod tests {
         let mut vertices: Vec<_> = graph.vertices().collect();
 
         while let Some(v) = vertices.pop() {
-            println!("Eliminating :{}", v);
             graph.eliminate_vertex(v);
             selector.eliminate_vertex(v);
 
@@ -665,9 +670,7 @@ mod tests {
             a.sort();
             let mut b: Vec<_> = graph.vertices().collect();
             b.sort();
-            println!("Checking equality!");
             assert_eq!(a, b);
-            println!("This worked!");
             let fc1: FnvHashMap<_, _> = vertices
                 .iter()
                 .map(|v| (*v, graph.fill_in_count(*v) as i64))

@@ -2,7 +2,7 @@ use crate::datastructures::BitSet;
 use crate::graph::graph::Graph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::heuristic_elimination_order::{
-    heuristic_elimination_decompose, MinDegreeSelector, MinFillSelector, Selector,
+    HeuristicEliminationDecomposer, MinDegreeSelector, MinFillSelector, Selector,
 };
 use crate::tree_decomposition::TreeDecomposition;
 use fnv::FnvHashMap;
@@ -17,6 +17,7 @@ use std::iter::FromIterator;
 
 #[cfg(feature = "handle-ctrlc")]
 use crate::signals::received_ctrl_c;
+use crate::solver::AtomSolver;
 
 #[derive(Clone, Debug)]
 pub struct HashMapGraph {
@@ -180,12 +181,16 @@ impl HashMapGraph {
         max_missing: usize,
         seed: Option<u64>,
     ) -> Option<MinorSafeResult> {
-        let mut new_td = heuristic_elimination_decompose::<MinFillSelector>(self.clone());
+        let mut new_td = HeuristicEliminationDecomposer::<MinFillSelector>::with_graph(&self)
+            .compute()
+            .unwrap();
         new_td.flatten();
         if let Some(result) = self.minor_safe_helper(new_td, max_tries, max_missing, seed) {
             Some(result)
         } else {
-            let mut new_td = heuristic_elimination_decompose::<MinDegreeSelector>(self.clone());
+            let mut new_td = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
+                .compute()
+                .unwrap();
             new_td.flatten();
             return self.minor_safe_helper(new_td, max_tries, max_missing, seed);
         }

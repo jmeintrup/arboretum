@@ -3,8 +3,7 @@ use crate::graph::Graph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use crate::heuristic_elimination_order::{
-    heuristic_elimination_decompose, HeuristicEliminationDecomposer, MinFillDecomposer,
-    MinFillSelector,
+    HeuristicEliminationDecomposer, MinFillDecomposer, MinFillSelector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::macros;
@@ -20,6 +19,9 @@ use std::collections::{HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash};
 use std::process::exit;
 use std::rc::Rc;
+
+#[cfg(feature = "log")]
+use log::info;
 
 #[derive(PartialEq, PartialOrd, Eq, Ord, Clone, Copy, Debug)]
 enum SeparationLevel {
@@ -129,7 +131,8 @@ impl<'a> SearchState<'a> {
             }
             match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
                 SeparatorSearchResult::Some(separator) => {
-                    println!("c found safe separator: {:?}", self.separation_level);
+                    #[cfg(log)]
+                    info!("c found safe separator: {:?}", self.separation_level);
                     let mut log_state = self.log_state.get();
                     log_state.increment(self.separation_level);
                     self.log_state.set(log_state);
@@ -140,13 +143,16 @@ impl<'a> SearchState<'a> {
                 }
                 SeparatorSearchResult::Delayed => {
                     if self.limits.check_again_before_atom {
-                        println!("c delaying separator search: {:?}", self.separation_level);
+                        #[cfg(feature = "log")]
+                        info!("c delaying separator search: {:?}", self.separation_level);
                         self.delayed_separation_levels.push(self.separation_level);
                     }
                     self.separation_level = self.separation_level.increment().unwrap();
                 }
             }
         }
+        #[cfg(feature = "log")]
+        info!("c searching for minor safe");
         if self.separation_level == SeparationLevel::MinorSafeClique
             && self.graph.order() < self.limits.minor_safe_separator
         {
@@ -161,7 +167,8 @@ impl<'a> SearchState<'a> {
                 self.limits.minor_safe_separator_tries,
                 self.limits.minor_safe_separator_max_missing,
             ) {
-                println!("c found safe separator: {:?}", self.separation_level);
+                #[cfg(feature = "log")]
+                info!("c found safe separator: {:?}", self.separation_level);
                 let mut log_state = self.log_state.get();
                 log_state.increment(self.separation_level);
                 self.log_state.set(log_state);
@@ -242,7 +249,8 @@ impl<'a> SearchState<'a> {
                 }
                 match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
                     SeparatorSearchResult::Some(separator) => {
-                        println!("c found safe separator: {:?}", self.separation_level);
+                        #[cfg(feature = "log")]
+                        info!("c found safe separator: {:?}", self.separation_level);
                         let mut log_state = self.log_state.get();
                         log_state.increment(self.separation_level);
                         self.log_state.set(log_state);
@@ -252,6 +260,8 @@ impl<'a> SearchState<'a> {
                 }
             }
         }
+        #[cfg(feature = "log")]
+        info!("c solving atom");
         self.separation_level = SeparationLevel::Atomic;
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
@@ -264,6 +274,8 @@ impl<'a> SearchState<'a> {
         let mut log_state = self.log_state.get();
         log_state.increment(self.separation_level);
         self.log_state.set(log_state);
+        #[cfg(feature = "log")]
+        info!("c computing upperbound_td");
         let upperbound_td = self.algorithms.upperbound.compute(&self.graph, lowerbound);
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
@@ -280,7 +292,8 @@ impl<'a> SearchState<'a> {
         {
             let lb: &Cell<_> = self.lower_bound.borrow();
             if atom_lowerbound > lb.get() {
-                println!(
+                #[cfg(feature = "log")]
+                info!(
                     "c Found new Lowerbound. Previous {} Now {}",
                     lb.get(),
                     atom_lowerbound
@@ -288,7 +301,8 @@ impl<'a> SearchState<'a> {
                 lb.set(atom_lowerbound);
             }
 
-            println!(
+            #[cfg(feature = "log")]
+            info!(
                 "c Atom with size {} has upperbound {}. Global lowerbound is {}",
                 self.graph.order(),
                 upperbound,
@@ -402,12 +416,12 @@ pub struct SafeSeparatorLimits {
 impl Default for SafeSeparatorLimits {
     fn default() -> Self {
         Self {
-            size_one_separator: usize::MAX,
-            size_two_separator: usize::MAX,
+            size_one_separator: 100_000,
+            size_two_separator: 1_000,
             size_three_separator: 300,
-            clique_separator: usize::MAX,
+            clique_separator: 10_000,
             almost_clique_separator: 300,
-            minor_safe_separator: usize::MAX,
+            minor_safe_separator: 10_000,
             minor_safe_separator_max_missing: 1_000,
             minor_safe_separator_tries: 25,
             check_again_before_atom: false,
@@ -416,6 +430,34 @@ impl Default for SafeSeparatorLimits {
 }
 
 impl SafeSeparatorLimits {
+    pub fn skip_all() -> Self {
+        Self {
+            size_one_separator: 0,
+            size_two_separator: 0,
+            size_three_separator: 0,
+            clique_separator: 0,
+            almost_clique_separator: 0,
+            minor_safe_separator: 0,
+            minor_safe_separator_max_missing: 0,
+            minor_safe_separator_tries: 0,
+            check_again_before_atom: false,
+        }
+    }
+
+    pub fn only_cut_vertex() -> Self {
+        Self {
+            size_one_separator: usize::MAX,
+            size_two_separator: 0,
+            size_three_separator: 0,
+            clique_separator: 0,
+            almost_clique_separator: 0,
+            minor_safe_separator: 0,
+            minor_safe_separator_max_missing: 0,
+            minor_safe_separator_tries: 0,
+            check_again_before_atom: false,
+        }
+    }
+
     pub fn size_two_separator(mut self, limit: usize) -> Self {
         if limit < self.size_one_separator {
             panic!("Size two separator limit can not be smaller than size one limit");

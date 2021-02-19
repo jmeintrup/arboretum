@@ -1,6 +1,6 @@
 use arboretum::graph::HashMapGraph;
 use arboretum::io::{PaceReader, PaceWriter};
-use arboretum::solver::{pace_heuristic, Solver};
+use arboretum::solver::Solver;
 use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -8,7 +8,9 @@ use std::io::{stdin, stdout, BufReader};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-use arboretum::SafeSeparatorLimits;
+#[cfg(log)]
+use log::info;
+
 #[cfg(feature = "jemallocator")]
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
@@ -78,15 +80,18 @@ fn main() -> io::Result<()> {
 
     let td = match mode {
         "heuristic" => {
-            println!("c Running in default heuristic mode.");
-            pace_heuristic(&graph)
+            #[cfg(log)]
+            info!("c Running in default heuristic mode.");
+            Solver::default_heuristic().solve(&graph)
         }
         "auto" => {
-            println!("c Running in default auto mode.");
-            Solver::default_exact().solve(&graph)
+            #[cfg(log)]
+            info!("c Running in default auto mode.");
+            Solver::auto(&graph).solve(&graph)
         }
         _ => {
-            println!("c Running in default exact mode.");
+            #[cfg(log)]
+            info!("c Running in default exact mode.");
             Solver::default_exact().solve(&graph)
         }
     };

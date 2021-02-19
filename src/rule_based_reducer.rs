@@ -2,10 +2,6 @@ use crate::exact::TamakiPid;
 use crate::graph::Graph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::heuristic_elimination_order::{
-    heuristic_elimination_decompose, HeuristicEliminationDecomposer, MinFillDecomposer,
-    MinFillSelector,
-};
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::solver::AtomSolver;
 use crate::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
@@ -63,7 +59,7 @@ impl RuleBasedPreprocessor {
             if received_ctrl_c() {
                 // unknown lowerbound
                 self.lower_bound = 0;
-                return break;
+                return;
             }
         }
         if self.processed_graph.order() == 0 {
@@ -119,6 +115,12 @@ impl RuleBasedPreprocessor {
             self.processed_graph.remove_vertex(v);
             return true;
         }
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
         // single-degree
 
         let found = self
@@ -131,6 +133,12 @@ impl RuleBasedPreprocessor {
             self.stack.push(bag);
             self.processed_graph.remove_vertex(v);
             return true;
+        }
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
         }
         // series
         let found = self
@@ -145,6 +153,12 @@ impl RuleBasedPreprocessor {
             );
             self.lower_bound = max(self.lower_bound, 3);
             return true;
+        }
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
         }
         // triangle rule
         self.lower_bound = max(self.lower_bound, 4);
@@ -172,6 +186,12 @@ impl RuleBasedPreprocessor {
             );
             return true;
         }
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
         // buddy rule
         let found = self.processed_graph.vertices().find(|v| {
             self.processed_graph
@@ -192,6 +212,12 @@ impl RuleBasedPreprocessor {
                 self.stack.borrow_mut(),
             );
             return true;
+        }
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
         }
         // cube rule
         let mut cube: Option<Cube> = None;
@@ -246,6 +272,7 @@ impl RuleBasedPreprocessor {
             });
             break;
         }
+
         if let Some(cube) = cube {
             let mut bag = FnvHashSet::with_capacity_and_hasher(4, Default::default());
             bag.insert(cube.b);
@@ -263,7 +290,12 @@ impl RuleBasedPreprocessor {
 
             return true;
         }
-
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
         let found = self
             .processed_graph
             .vertices()
@@ -276,6 +308,12 @@ impl RuleBasedPreprocessor {
                 self.stack.borrow_mut(),
             );
             return true;
+        }
+        #[cfg(feature = "handle-ctrlc")]
+        if received_ctrl_c() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
         }
         let found = self.processed_graph.vertices().find(|v| {
             self.lower_bound > self.processed_graph.degree(*v)
@@ -314,6 +352,12 @@ impl RuleBasedPreprocessor {
         // remove all low degree vertices. First remove all islets, then all islets and 1-degree,
         // then all islets, 1-degree and 2-degree
         for d in 0..3 {
+            #[cfg(feature = "handle-ctrlc")]
+            if received_ctrl_c() {
+                // unknown lowerbound
+                self.lower_bound = 0;
+                return;
+            }
             let mut visited: FnvHashSet<usize> = FnvHashSet::with_capacity_and_hasher(
                 self.processed_graph.order(),
                 Default::default(),
@@ -328,6 +372,12 @@ impl RuleBasedPreprocessor {
                 });
 
             while let Some(v) = queue.pop_front() {
+                #[cfg(feature = "handle-ctrlc")]
+                if received_ctrl_c() {
+                    // unknown lowerbound
+                    self.lower_bound = 0;
+                    return;
+                }
                 let mut nb: FnvHashSet<_> = self.processed_graph.neighborhood(v).collect();
                 if nb.len() > d {
                     continue;

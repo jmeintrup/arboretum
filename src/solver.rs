@@ -1,15 +1,16 @@
 use crate::exact::TamakiPid;
-use crate::graph::{HashMapGraph, Graph};
+use crate::graph::{Graph, HashMapGraph};
 use crate::heuristic_elimination_order::{
-    heuristic_elimination_decompose, HeuristicEliminationDecomposer, MinDegreeDecomposer,
-    MinDegreeSelector, MinFillDecomposer, MinFillDegree, MinFillDegreeSelector, MinFillSelector,
-    Selector,
+    HeuristicEliminationDecomposer, MinDegreeDecomposer, MinDegreeSelector, MinFillDecomposer,
+    MinFillDegree, MinFillDegreeSelector, MinFillSelector, Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::macros;
 use crate::rule_based_reducer::RuleBasedPreprocessor;
 use crate::safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits};
 use crate::tree_decomposition::TreeDecomposition;
+#[cfg(feature = "log")]
+use log::info;
 use std::array;
 use std::cmp::max;
 use std::hash::Hash;
@@ -225,6 +226,57 @@ impl Solver {
         }
     }
 
+    pub fn auto(graph: &HashMapGraph) -> Self {
+        match graph.order() {
+            0..=3000 => {
+                Self::default_heuristic().algorithm_types(AlgorithmTypes::default().atom_solver(
+                    AtomSolverType::Custom(|graph, lowerbound, upperbound| {
+                        if graph.order() <= 150 {
+                            #[cfg(feature = "log")]
+                            info!("c Attempting to solve atom exactly");
+                            TamakiPid::with_bounds(graph, lowerbound, upperbound).compute()
+                        } else {
+                            #[cfg(feature = "log")]
+                            info!("c Atom too large to be solved exactly");
+                            Err(())
+                        }
+                    }),
+                ))
+            }
+            3001..=10000 => Self::default_heuristic(),
+            10001..=50000 => {
+                let lowerbound = LowerboundHeuristicType::None;
+                let upperbound = UpperboundHeuristicType::MinDegree;
+                let atom_solver = AtomSolverType::None;
+                let algorithm_types = AlgorithmTypes {
+                    atom_solver,
+                    upperbound,
+                    lowerbound,
+                };
+                let limits = SafeSeparatorLimits::only_cut_vertex();
+                Self::default()
+                    .algorithm_types(algorithm_types)
+                    .safe_separator_limits(limits)
+                    .apply_reduction_rules(true)
+            }
+            _ => {
+                let lowerbound = LowerboundHeuristicType::None;
+                let upperbound = UpperboundHeuristicType::MinDegree;
+                let atom_solver = AtomSolverType::None;
+                let algorithm_types = AlgorithmTypes {
+                    atom_solver,
+                    upperbound,
+                    lowerbound,
+                };
+                let limits = SafeSeparatorLimits::skip_all();
+                Self::default()
+                    .algorithm_types(algorithm_types)
+                    .safe_separator_limits(limits)
+                    .apply_reduction_rules(false)
+            }
+        }
+    }
+
     pub fn default_exact() -> Self {
         Self::default()
     }
@@ -235,6 +287,11 @@ impl Solver {
     impl_setter!(self, use_atom_bag_size_for_lowerbound, bool);
 
     pub fn solve(&self, graph: &HashMapGraph) -> TreeDecomposition {
+        #[cfg(feature = "log")]
+        info!(
+            "c attempting to solve graph with {} vertices",
+            graph.order()
+        );
         let mut td = TreeDecomposition::default();
         if graph.order() == 0 {
             return td;
@@ -244,10 +301,17 @@ impl Solver {
         } else {
             let mut lowerbound = 0;
             let components = graph.connected_components();
+            #[cfg(feature = "log")]
+            info!("c obtained {} components", components.len());
             if components.len() > 1 {
                 td.add_bag(Default::default());
             }
             for sub_graph in components.iter().map(|c| graph.vertex_induced(c)) {
+                #[cfg(feature = "log")]
+                info!(
+                    "c attempting to solve subgraph with {} vertices",
+                    sub_graph.order()
+                );
                 if sub_graph.order() <= 2 {
                     let idx = td.add_bag(sub_graph.vertices().collect());
                     if td.bags.len() > 1 {
@@ -258,8 +322,14 @@ impl Solver {
                 lowerbound = max(lowerbound, 1);
 
                 let mut reducer: Option<_> = if self.apply_reduction_rules {
+                    #[cfg(feature = "log")]
+                    info!("c applying reduction rules");
                     let mut tmp = RuleBasedPreprocessor::new(&sub_graph);
                     tmp.preprocess();
+
+                    #[cfg(feature = "log")]
+                    info!("c reduced graph to: {}", tmp.graph().order());
+
                     if tmp.graph().order() <= lowerbound + 1 {
                         td.combine_with_or_replace(0, tmp.into_td());
                         continue;
@@ -274,6 +344,9 @@ impl Solver {
                     Some(reducer) => (reducer.graph(), reducer.lower_bound),
                 };
                 lowerbound = max(lowerbound, new_lowerbound);
+
+                #[cfg(feature = "log")]
+                info!("c solving reduced graph");
 
                 let mut result = SafeSeparatorFramework::default()
                     .algorithms(self.algorithm_types)
