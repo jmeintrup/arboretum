@@ -39,6 +39,7 @@ if not os.path.exists(root):
 for file in glob(grfiles + "/he0*.gr"):
     base = os.path.basename(file)
     instance = os.path.splitext(base)[0]
+    print("working on: " + instance)
 
     stdin = open(file, "r")
     stdout = open(root + "/" + instance + ".td", "w")
