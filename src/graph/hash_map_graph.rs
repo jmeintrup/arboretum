@@ -884,7 +884,9 @@ mod tests {
 
         graph.remove_edge(0, 1);
 
-        assert_eq!(graph.order(), 0);
+        assert_eq!(graph.degree(0), 0);
+        assert_eq!(graph.degree(1), 0);
+        assert_eq!(graph.order(), 2);
     }
 
     #[test]

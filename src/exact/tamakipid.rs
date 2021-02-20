@@ -69,17 +69,17 @@ pub struct TamakiPid {
     endorsers: Vec<PMC>,
     solution: Option<PMC>,
     cache: Cache,
-    phase: Phase,
+    state: State,
 }
 
-enum Phase {
+enum State {
     Uninitialized,
     Intitial(usize),
     IBlockProcessing,
-    EndorserPhase,
+    Endorsing,
 }
 
-impl Default for Phase {
+impl Default for State {
     fn default() -> Self {
         Self::Uninitialized
     }
@@ -125,12 +125,14 @@ impl TamakiPid {
                 .collect();
             td.add_bag(vertex_set);
         }
-        return td;
+        td
     }
 
     pub fn step(mut self) -> StepResult {
         if self.graph.order() <= 2 {
-            return StepResult::Finished(ComputationResult::ComputedTreeDecomposition(self.trivial_td()))
+            return StepResult::Finished(ComputationResult::ComputedTreeDecomposition(
+                self.trivial_td(),
+            ));
         }
         if self.target_width == self.upper_bound {
             return StepResult::Finished(ComputationResult::Bounds(Bounds {
@@ -138,23 +140,23 @@ impl TamakiPid {
                 upperbound: self.upper_bound,
             }));
         }
-        return match self.phase {
-            Phase::Uninitialized => {
+        return match self.state {
+            State::Uninitialized => {
                 self.initialize();
-                self.phase = Phase::Intitial(0);
+                self.state = State::Intitial(0);
                 StepResult::Working(self)
             }
-            Phase::Intitial(v) => {
+            State::Intitial(v) => {
                 if v >= self.graph.order() {
-                    self.phase = Phase::IBlockProcessing;
-                    return StepResult::Working(self)
+                    self.state = State::IBlockProcessing;
+                    return StepResult::Working(self);
                 }
                 let mut closed_neighborhood = self.graph.neighborhood_as_bitset(v).clone();
                 closed_neighborhood.set_bit(v);
 
                 if closed_neighborhood.cardinality() > (self.target_width + 1) as usize {
-                    self.phase = Phase::Intitial(v + 1);
-                    return StepResult::Working(self)
+                    self.state = State::Intitial(v + 1);
+                    return StepResult::Working(self);
                 }
 
                 let blocks = separate_into_blocks(
@@ -179,10 +181,10 @@ impl TamakiPid {
                         self.pending_endorsers.push(pmc);
                     }
                 }
-                self.phase = Phase::Intitial(v + 1);
+                self.state = State::Intitial(v + 1);
                 StepResult::Working(self)
             }
-            Phase::IBlockProcessing => {
+            State::IBlockProcessing => {
                 if let Some(ready) = self.ready_queue.pop_front() {
                     ready.process(
                         &mut self.o_block_sieve,
@@ -204,12 +206,12 @@ impl TamakiPid {
                         StepResult::Working(self)
                     }
                 } else {
-                    self.phase = Phase::EndorserPhase;
+                    self.state = State::Endorsing;
                     self.endorsers = std::mem::take(&mut self.pending_endorsers);
                     StepResult::Working(self)
                 }
             }
-            Phase::EndorserPhase => {
+            State::Endorsing => {
                 if let Some(endorser) = self.endorsers.pop() {
                     if endorser.ready(&self.cache.i_block_cache) {
                         endorser.endorse(
@@ -231,24 +233,21 @@ impl TamakiPid {
                     } else {
                         StepResult::Working(self)
                     }
+                } else if self.ready_queue.is_empty() {
+                    self.target_width += 1;
+                    self.state = State::Uninitialized;
+                    StepResult::Working(self)
                 } else {
-                    if self.ready_queue.is_empty() {
-                        self.target_width += 1;
-                        self.phase = Phase::Uninitialized;
-                        StepResult::Working(self)
-                    } else {
-                        self.phase = Phase::IBlockProcessing;
-                        StepResult::Working(self)
-                    }
+                    self.state = State::IBlockProcessing;
+                    StepResult::Working(self)
                 }
             }
-        }
+        };
     }
-    
+
     fn initialize(&mut self) {
         self.cache.o_block_cache = OBlockCache::default();
-        self.o_block_sieve =
-            LayeredSieve::new(self.graph.order() as u32, self.target_width as u32);
+        self.o_block_sieve = LayeredSieve::new(self.graph.order() as u32, self.target_width as u32);
         self.ready_queue = VecDeque::with_capacity(self.cache.i_block_cache.len());
         self.ready_queue = self.cache.i_block_cache.values().cloned().collect();
     }
@@ -256,7 +255,7 @@ impl TamakiPid {
 
 pub enum StepResult {
     Working(TamakiPid),
-    Finished(ComputationResult)
+    Finished(ComputationResult),
 }
 
 impl StepResult {
@@ -309,7 +308,7 @@ impl AtomSolver for TamakiPid {
                 i_block_cache: IBlockCache::default(),
                 block_cache: BlockCache::default(),
             },
-            phase: Phase::default()
+            state: State::default(),
         }
     }
 
@@ -1016,23 +1015,20 @@ impl BlockSieve {
         while values.len() > Self::MAX_CHILDREN_SIZE {
             t = (ntz + t) / 2;
             m = consecutive_one_bit(ntz, t);
-            let mut p = 0;
+            let mut new_len = 0;
             for i in 0..sz {
                 let label = (node.get_label_at(i) & m) >> ntz;
-                match values[0..p].binary_search(&label) {
-                    Err(j) => {
-                        let mut k = p as i64;
-                        while k - 1 >= j as i64 {
-                            values[k as usize] = values[(k - 1) as usize];
-                            k -= 1;
-                        }
-                        values[j as usize] = label;
-                        p += 1;
+                if let Err(j) = values[0..new_len].binary_search(&label) {
+                    let mut k = new_len as i64;
+                    while k > j as i64 {
+                        values[k as usize] = values[(k - 1) as usize];
+                        k -= 1;
                     }
-                    _ => {}
+                    values[j as usize] = label;
+                    new_len += 1;
                 }
             }
-            values.resize(p, 0);
+            values.resize(new_len, 0);
         }
 
         let mut new_children = Vec::with_capacity(values.len());
@@ -1050,7 +1046,7 @@ impl BlockSieve {
             let j = values[..].binary_search(&((label & m) >> ntz)).unwrap();
             if node.is_leaf(last) {
                 let tmp = node.node_mut().values.get_mut(i).unwrap();
-                let value = std::mem::replace(tmp, Default::default());
+                let value = std::mem::take(tmp);
                 new_children[j].add_value(label, value);
             } else {
                 let tmp = node.node_mut().children.get_mut(i).unwrap();
