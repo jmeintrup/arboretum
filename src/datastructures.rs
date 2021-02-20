@@ -3,11 +3,11 @@ use core::mem;
 use fnv::FnvHashMap;
 use num::{NumCast, ToPrimitive};
 use std::cmp::Ordering;
+use std::collections::hash_map::Entry;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{AddAssign, Div, Index};
 use std::{fmt, iter};
-use std::collections::hash_map::Entry;
 
 #[derive(Clone, Default)]
 pub struct BitSet {
@@ -528,7 +528,11 @@ impl BinaryQueue {
     }
 
     fn parent(&self, idx: usize) -> Option<usize> {
-        if idx == 0 { None } else { Some((idx - 1) / 2) }
+        if idx == 0 {
+            None
+        } else {
+            Some((idx - 1) / 2)
+        }
     }
 
     fn child(&self, idx: usize, child_type: ChildType) -> Option<usize> {
