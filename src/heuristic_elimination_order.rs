@@ -209,7 +209,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
 
     fn compute(self) -> ComputationResult {
         #[cfg(feature = "log")]
-        info!(" computing heuristic elimination td");
+        info!("computing heuristic elimination td");
         let mut tree_decomposition = TreeDecomposition::default();
         if self.selector.graph().order() <= self.lowerbound + 1 {
             tree_decomposition.add_bag(self.selector.graph().vertices().collect());
@@ -238,7 +238,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
                 #[cfg(feature = "log")]
-                info!(" breaking heuristic elimination td due to ctrl+c");
+                info!("breaking heuristic elimination td due to ctrl+c");
                 break;
             }
 

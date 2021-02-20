@@ -203,7 +203,7 @@ pub struct Solver {
     algorithm_types: AlgorithmTypes,
     safe_separator_limits: SafeSeparatorLimits,
     apply_reduction_rules: bool,
-    use_atom_bag_size_for_lowerbound: bool,
+    use_atom_width_for_lowerbound: bool,
 }
 
 impl Default for Solver {
@@ -212,7 +212,7 @@ impl Default for Solver {
             algorithm_types: AlgorithmTypes::default(),
             safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
-            use_atom_bag_size_for_lowerbound: true,
+            use_atom_width_for_lowerbound: true,
         }
     }
 }
@@ -223,7 +223,7 @@ impl Solver {
             algorithm_types: AlgorithmTypes::default().atom_solver(AtomSolverType::None),
             safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
-            use_atom_bag_size_for_lowerbound: true,
+            use_atom_width_for_lowerbound: true,
         }
     }
 
@@ -234,11 +234,11 @@ impl Solver {
                     AtomSolverType::Custom(|graph, lowerbound, upperbound| {
                         if graph.order() <= 150 {
                             #[cfg(feature = "log")]
-                            info!(" Attempting to solve atom exactly");
+                            info!("Attempting to solve atom exactly");
                             TamakiPid::with_bounds(graph, lowerbound, upperbound).compute()
                         } else {
                             #[cfg(feature = "log")]
-                            info!(" Atom too large to be solved exactly");
+                            info!("Atom too large to be solved exactly");
                             ComputationResult::Bounds(Bounds {
                                 lowerbound,
                                 upperbound,
@@ -288,14 +288,11 @@ impl Solver {
     impl_setter!(self, algorithm_types, AlgorithmTypes);
     impl_setter!(self, safe_separator_limits, SafeSeparatorLimits);
     impl_setter!(self, apply_reduction_rules, bool);
-    impl_setter!(self, use_atom_bag_size_for_lowerbound, bool);
+    impl_setter!(self, use_atom_width_for_lowerbound, bool);
 
     pub fn solve(&self, graph: &HashMapGraph) -> TreeDecomposition {
         #[cfg(feature = "log")]
-        info!(
-            "c attempting to solve graph with {} vertices",
-            graph.order()
-        );
+        info!("attempting to solve graph with {} vertices", graph.order());
         let mut td = TreeDecomposition::default();
         if graph.order() == 0 {
             return td;
@@ -306,14 +303,14 @@ impl Solver {
             let mut lowerbound = 0;
             let components = graph.connected_components();
             #[cfg(feature = "log")]
-            info!(" obtained {} components", components.len());
+            info!("obtained {} components", components.len());
             if components.len() > 1 {
                 td.add_bag(Default::default());
             }
             for sub_graph in components.iter().map(|c| graph.vertex_induced(c)) {
                 #[cfg(feature = "log")]
                 info!(
-                    "c attempting to solve subgraph with {} vertices",
+                    "attempting to solve subgraph with {} vertices",
                     sub_graph.order()
                 );
                 if sub_graph.order() <= 2 {
@@ -327,12 +324,12 @@ impl Solver {
 
                 let reducer: Option<_> = if self.apply_reduction_rules {
                     #[cfg(feature = "log")]
-                    info!(" applying reduction rules");
+                    info!("applying reduction rules");
                     let mut tmp = RuleBasedPreprocessor::new(&sub_graph);
                     tmp.preprocess();
 
                     #[cfg(feature = "log")]
-                    info!(" reduced graph to: {}", tmp.graph().order());
+                    info!("reduced graph to: {}", tmp.graph().order());
 
                     if tmp.graph().order() <= lowerbound + 1 {
                         td.combine_with_or_replace(0, tmp.into_td());
@@ -350,7 +347,7 @@ impl Solver {
                 lowerbound = max(lowerbound, new_lowerbound);
 
                 #[cfg(feature = "log")]
-                info!(" solving reduced graph");
+                info!("solving reduced graph");
 
                 let result = SafeSeparatorFramework::default()
                     .algorithms(self.algorithm_types)
@@ -359,13 +356,13 @@ impl Solver {
                 lowerbound = max(lowerbound, result.lowerbound);
                 let mut partial_td = result.tree_decomposition;
                 partial_td.flatten();
-                if self.use_atom_bag_size_for_lowerbound {
+                if self.use_atom_width_for_lowerbound {
                     lowerbound = max(lowerbound, partial_td.max_bag_size - 1);
                 }
                 match partial_td.verify(reduced_graph) {
                     Ok(_) => {
                         #[cfg(feature = "log")]
-                        info!(" partial td computed after reduction rules is valid!");
+                        info!("partial td computed after reduction rules is valid!");
                     }
                     Err(e) => {
                         panic!(

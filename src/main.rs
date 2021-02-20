@@ -81,17 +81,17 @@ fn main() -> io::Result<()> {
     let td = match mode {
         "heuristic" => {
             #[cfg(log)]
-            info!(" Running in default heuristic mode.");
+            info!("Running in default heuristic mode.");
             Solver::default_heuristic().solve(&graph)
         }
         "auto" => {
             #[cfg(log)]
-            info!(" Running in default auto mode.");
+            info!("Running in default auto mode.");
             Solver::auto(&graph).solve(&graph)
         }
         _ => {
             #[cfg(log)]
-            info!(" Running in default exact mode.");
+            info!("Running in default exact mode.");
             Solver::default_exact().solve(&graph)
         }
     };

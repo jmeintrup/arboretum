@@ -130,11 +130,7 @@ impl TreeDecomposition {
         id
     }
 
-    pub fn add_child_bags(
-        &mut self,
-        parent: usize,
-        children: Vec<FxHashSet<usize>>,
-    ) -> Vec<usize> {
+    pub fn add_child_bags(&mut self, parent: usize, children: Vec<FxHashSet<usize>>) -> Vec<usize> {
         assert!(self.bags.len() < parent);
         let mut ids = Vec::with_capacity(children.len());
         for c in children {

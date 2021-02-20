@@ -11,6 +11,9 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
+#[cfg(feature = "log")]
+use log::info;
+
 type BlockCache = FxHashMap<BitSet, Block>;
 type OBlockCache = FxHashMap<BitSet, OBlock>;
 type IBlockCache = FxHashMap<BitSet, IBlock>;
@@ -326,6 +329,15 @@ impl AtomSolver for TamakiPid {
                     self = new_self;
                 }
                 StepResult::Finished(result) => {
+                    #[cfg(feature = "log")]
+                    match &result {
+                        ComputationResult::ComputedTreeDecomposition(td) => {
+                            info!("Found exact td with width: {}", td.max_bag_size - 1);
+                        }
+                        ComputationResult::Bounds(_) => {
+                            info!("Could not find td for atom with given bounds");
+                        }
+                    }
                     return result;
                 }
             }

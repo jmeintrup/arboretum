@@ -47,6 +47,7 @@ struct SearchState<'a> {
     limits: &'a SafeSeparatorLimits,
     algorithms: &'a AlgorithmTypes,
     seed: Option<u64>,
+    use_atom_width_as_lower_bound: bool,
 }
 
 impl<'a> SearchState<'a> {
@@ -61,6 +62,7 @@ impl<'a> SearchState<'a> {
             limits: &self.limits,
             algorithms: &self.algorithms,
             seed: self.seed,
+            use_atom_width_as_lower_bound: self.use_atom_width_as_lower_bound,
         }
     }
 
@@ -121,7 +123,7 @@ impl<'a> SearchState<'a> {
             match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
                 SeparatorSearchResult::Some(separator) => {
                     #[cfg(log)]
-                    info!(" found safe separator: {:?}", self.separation_level);
+                    info!("found safe separator: {:?}", self.separation_level);
                     let mut log_state = self.log_state.get();
                     log_state.increment(self.separation_level);
                     self.log_state.set(log_state);
@@ -133,7 +135,7 @@ impl<'a> SearchState<'a> {
                 SeparatorSearchResult::Delayed => {
                     if self.limits.check_again_before_atom {
                         #[cfg(feature = "log")]
-                        info!(" delaying separator search: {:?}", self.separation_level);
+                        info!("delaying separator search: {:?}", self.separation_level);
                         self.delayed_separation_levels.push(self.separation_level);
                     }
                     self.separation_level = self.separation_level.increment().unwrap();
@@ -141,7 +143,7 @@ impl<'a> SearchState<'a> {
             }
         }
         #[cfg(feature = "log")]
-        info!(" searching for minor safe");
+        info!("searching for minor safe");
         if self.separation_level == SeparationLevel::MinorSafeClique
             && self.graph.order() < self.limits.minor_safe_separator
         {
@@ -160,7 +162,7 @@ impl<'a> SearchState<'a> {
                 self.limits.minor_safe_separator_max_missing,
             ) {
                 #[cfg(feature = "log")]
-                info!(" found safe separator: {:?}", self.separation_level);
+                info!("found safe separator: {:?}", self.separation_level);
                 let mut log_state = self.log_state.get();
                 log_state.increment(self.separation_level);
                 self.log_state.set(log_state);
@@ -243,7 +245,7 @@ impl<'a> SearchState<'a> {
                 match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
                     SeparatorSearchResult::Some(separator) => {
                         #[cfg(feature = "log")]
-                        info!(" found safe separator: {:?}", self.separation_level);
+                        info!("found safe separator: {:?}", self.separation_level);
                         let mut log_state = self.log_state.get();
                         log_state.increment(self.separation_level);
                         self.log_state.set(log_state);
@@ -256,7 +258,7 @@ impl<'a> SearchState<'a> {
             }
         }
         #[cfg(feature = "log")]
-        info!(" solving atom");
+        info!("solving atom");
         self.separation_level = SeparationLevel::Atomic;
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
@@ -271,7 +273,7 @@ impl<'a> SearchState<'a> {
         log_state.set_max_atom(self.graph.order());
         self.log_state.set(log_state);
         #[cfg(feature = "log")]
-        info!(" computing upperbound_td");
+        info!("computing upperbound_td");
         let upperbound_td = self.algorithms.upperbound.compute(&self.graph, lowerbound);
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
@@ -294,7 +296,7 @@ impl<'a> SearchState<'a> {
             if atom_lowerbound > lb.get() {
                 #[cfg(feature = "log")]
                 info!(
-                    "c Found new Lowerbound. Previous {} Now {}",
+                    "Found new Lowerbound. Previous {} Now {}",
                     lb.get(),
                     atom_lowerbound
                 );
@@ -303,7 +305,7 @@ impl<'a> SearchState<'a> {
 
             #[cfg(feature = "log")]
             info!(
-                "c Atom with size {} has upperbound {}. Global lowerbound is {}",
+                "Atom with size {} has upperbound {}. Global lowerbound is {}",
                 self.graph.order(),
                 upperbound,
                 lb.get()
@@ -326,11 +328,51 @@ impl<'a> SearchState<'a> {
             .atom_solver
             .compute(self.graph.borrow(), lowerbound, upperbound)
         {
-            ComputationResult::ComputedTreeDecomposition(td) => td,
+            ComputationResult::ComputedTreeDecomposition(td) => {
+                let lb: &Cell<_> = self.lower_bound.borrow();
+                let atom_lowerbound = td.max_bag_size - 1;
+                if atom_lowerbound > lb.get() && self.use_atom_width_as_lower_bound {
+                    #[cfg(feature = "log")]
+                    info!(
+                        "Found new Lowerbound. Previous {} Now {}",
+                        lb.get(),
+                        atom_lowerbound
+                    );
+                    lb.set(atom_lowerbound);
+                }
+                td
+            }
             _ => match upperbound_td {
                 None => match self.upperbound_td {
-                    Some(upperbound_td) => upperbound_td,
-                    None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                    Some(td) => {
+                        let lb: &Cell<_> = self.lower_bound.borrow();
+                        let atom_lowerbound = td.max_bag_size - 1;
+                        if atom_lowerbound > lb.get() && self.use_atom_width_as_lower_bound {
+                            #[cfg(feature = "log")]
+                            info!(
+                                "Found new Lowerbound. Previous {} Now {}",
+                                lb.get(),
+                                atom_lowerbound
+                            );
+                            lb.set(atom_lowerbound);
+                        }
+                        td
+                    }
+                    None => {
+                        let td = TreeDecomposition::with_root(self.graph.vertices().collect());
+                        let lb: &Cell<_> = self.lower_bound.borrow();
+                        let atom_lowerbound = td.max_bag_size - 1;
+                        if atom_lowerbound > lb.get() && self.use_atom_width_as_lower_bound {
+                            #[cfg(feature = "log")]
+                            info!(
+                                "Found new Lowerbound. Previous {} Now {}",
+                                lb.get(),
+                                atom_lowerbound
+                            );
+                            lb.set(atom_lowerbound);
+                        }
+                        td
+                    }
                 },
                 Some(td) => td,
             },
@@ -492,6 +534,7 @@ impl SafeSeparatorLimits {
 pub struct SafeSeparatorFramework {
     safe_separator_limits: SafeSeparatorLimits,
     algorithms: AlgorithmTypes,
+    use_atom_width_as_lower_bound: bool,
 }
 
 impl Default for SafeSeparatorFramework {
@@ -499,6 +542,7 @@ impl Default for SafeSeparatorFramework {
         Self {
             safe_separator_limits: SafeSeparatorLimits::default(),
             algorithms: AlgorithmTypes::default(),
+            use_atom_width_as_lower_bound: true,
         }
     }
 }
@@ -506,6 +550,7 @@ impl Default for SafeSeparatorFramework {
 impl SafeSeparatorFramework {
     impl_setter!(self, safe_separator_limits, SafeSeparatorLimits);
     impl_setter!(self, algorithms, AlgorithmTypes);
+    impl_setter!(self, use_atom_width_as_lower_bound, bool);
 
     pub fn compute(self, graph: &HashMapGraph, lowerbound: usize) -> DecompositionResult {
         let lowerbound = Rc::new(Cell::new(lowerbound));
@@ -522,6 +567,7 @@ impl SafeSeparatorFramework {
             limits: &limits,
             algorithms: &algorithms,
             seed: None,
+            use_atom_width_as_lower_bound: self.use_atom_width_as_lower_bound,
         })
         .search();
         DecompositionResult {
