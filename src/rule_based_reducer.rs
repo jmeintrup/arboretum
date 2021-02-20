@@ -1,18 +1,11 @@
-use crate::exact::TamakiPid;
-use crate::graph::Graph;
+use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::solver::AtomSolver;
-use crate::tree_decomposition::{Bag, TreeDecomposition, TreeDecompositionValidationError};
-use fnv::{FnvHashMap, FnvHashSet};
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::{Cell, RefCell};
+use crate::tree_decomposition::TreeDecomposition;
+use fnv::FnvHashSet;
+use std::borrow::BorrowMut;
 use std::cmp::max;
 use std::collections::VecDeque;
-use std::hash::Hash;
-use std::process::exit;
-use std::rc::Rc;
 
 #[cfg(feature = "handle-ctrlc")]
 use crate::signals::received_ctrl_c;
@@ -26,12 +19,10 @@ fn eliminate(v: usize, graph: &mut HashMapGraph, stack: &mut Vec<FnvHashSet<usiz
 }
 
 struct Cube {
-    a: usize,
-    b: usize,
-    c: usize,
-    x: usize,
-    y: usize,
-    z: usize,
+    first_neighbor_of_x: usize,
+    second_neighbor_of_x: usize,
+    neighbor_of_y: usize,
+    to_eliminate: usize,
     v: usize,
 }
 
@@ -67,16 +58,11 @@ impl RuleBasedPreprocessor {
         }
     }
 
-    pub fn combine_into_td(
-        mut self,
-        mut td: TreeDecomposition,
-        graph: &HashMapGraph,
-    ) -> TreeDecomposition {
+    pub fn combine_into_td(mut self, td: TreeDecomposition) -> TreeDecomposition {
         let mut vertices = FnvHashSet::default();
         for bag in &td.bags {
             vertices.extend(bag.vertex_set.iter().copied())
         }
-        let tmp = self.stack.clone();
         self.stack.push(vertices);
         self.process_stack();
         self.partial_tree_decomposition.flatten();
@@ -194,16 +180,13 @@ impl RuleBasedPreprocessor {
         }
         // buddy rule
         let found = self.processed_graph.vertices().find(|v| {
-            self.processed_graph
-                .vertices()
-                .find(|u| {
-                    v < u
-                        && self.processed_graph.degree(*v) == 3
-                        && self.processed_graph.degree(*u) == 3
-                        && self.processed_graph.neighborhood_set(*u)
-                            == self.processed_graph.neighborhood_set(*v)
-                })
-                .is_some()
+            self.processed_graph.vertices().any(|u| {
+                v < &u
+                    && self.processed_graph.degree(*v) == 3
+                    && self.processed_graph.degree(u) == 3
+                    && self.processed_graph.neighborhood_set(u)
+                        == self.processed_graph.neighborhood_set(*v)
+            })
         });
         if let Some(v) = found {
             eliminate(
@@ -231,43 +214,53 @@ impl RuleBasedPreprocessor {
                 .iter()
                 .copied()
                 .collect();
-            let (x, y, z) = (nb[0], nb[1], nb[2]);
-            if self.processed_graph.degree(x) != 3
-                || self.processed_graph.degree(y) != 3
-                || self.processed_graph.degree(z) != 3
+            let (neighbor_x, neighbor_y, to_eliminate) = (nb[0], nb[1], nb[2]);
+            if self.processed_graph.degree(neighbor_x) != 3
+                || self.processed_graph.degree(neighbor_y) != 3
+                || self.processed_graph.degree(to_eliminate) != 3
             {
                 continue;
             }
             let x_nb: Vec<_> = self
                 .processed_graph
-                .neighborhood_set(x)
+                .neighborhood_set(neighbor_x)
                 .iter()
                 .copied()
                 .collect();
-            let mut a = if x_nb[0] == v { x_nb[2] } else { x_nb[0] };
-            let mut b = if x_nb[1] == v { x_nb[2] } else { x_nb[1] };
-            if !(self.processed_graph.has_edge(y, a) && self.processed_graph.has_edge(z, b)) {
-                std::mem::swap(&mut a, &mut b);
+            let mut first_neighbor_of_x = if x_nb[0] == v { x_nb[2] } else { x_nb[0] };
+            let mut second_neighbor_of_x = if x_nb[1] == v { x_nb[2] } else { x_nb[1] };
+            if !(self
+                .processed_graph
+                .has_edge(neighbor_y, first_neighbor_of_x)
+                && self
+                    .processed_graph
+                    .has_edge(to_eliminate, second_neighbor_of_x))
+            {
+                std::mem::swap(&mut first_neighbor_of_x, &mut second_neighbor_of_x);
             }
-            if !(self.processed_graph.has_edge(y, a) && self.processed_graph.has_edge(z, b)) {
+            if !(self
+                .processed_graph
+                .has_edge(neighbor_y, first_neighbor_of_x)
+                && self
+                    .processed_graph
+                    .has_edge(to_eliminate, second_neighbor_of_x))
+            {
                 continue;
             }
-            let c_option = self
+            let neighbor_of_y = self
                 .processed_graph
-                .neighborhood(y)
-                .find(|c| *c != v && self.processed_graph.has_edge(z, *c));
-            if c_option.is_none() {
+                .neighborhood(neighbor_y)
+                .find(|c| *c != v && self.processed_graph.has_edge(to_eliminate, *c));
+            if neighbor_of_y.is_none() {
                 return false;
             }
-            let c = c_option.unwrap();
+            let neighbor_of_y = neighbor_of_y.unwrap();
 
             cube = Some(Cube {
-                a,
-                b,
-                c,
-                x,
-                y,
-                z,
+                first_neighbor_of_x,
+                second_neighbor_of_x,
+                neighbor_of_y,
+                to_eliminate,
                 v,
             });
             break;
@@ -275,17 +268,22 @@ impl RuleBasedPreprocessor {
 
         if let Some(cube) = cube {
             let mut bag = FnvHashSet::with_capacity_and_hasher(4, Default::default());
-            bag.insert(cube.b);
-            bag.insert(cube.z);
+            bag.insert(cube.second_neighbor_of_x);
+            bag.insert(cube.to_eliminate);
             bag.insert(cube.v);
-            bag.insert(cube.c);
-            self.processed_graph.remove_vertex(cube.z);
-            self.processed_graph.add_edge(cube.a, cube.b);
-            self.processed_graph.add_edge(cube.a, cube.c);
-            self.processed_graph.add_edge(cube.a, cube.v);
-            self.processed_graph.add_edge(cube.b, cube.c);
-            self.processed_graph.add_edge(cube.b, cube.v);
-            self.processed_graph.add_edge(cube.c, cube.v);
+            bag.insert(cube.neighbor_of_y);
+            self.processed_graph.remove_vertex(cube.to_eliminate);
+            self.processed_graph
+                .add_edge(cube.first_neighbor_of_x, cube.second_neighbor_of_x);
+            self.processed_graph
+                .add_edge(cube.first_neighbor_of_x, cube.neighbor_of_y);
+            self.processed_graph
+                .add_edge(cube.first_neighbor_of_x, cube.v);
+            self.processed_graph
+                .add_edge(cube.second_neighbor_of_x, cube.neighbor_of_y);
+            self.processed_graph
+                .add_edge(cube.second_neighbor_of_x, cube.v);
+            self.processed_graph.add_edge(cube.neighbor_of_y, cube.v);
             self.stack.push(bag);
 
             return true;

@@ -1,13 +1,12 @@
 use bitvec::prelude::*;
 use core::mem;
 use fnv::FnvHashMap;
-use num::{Integer, Num, NumCast, ToPrimitive};
+use num::{NumCast, ToPrimitive};
 use std::cmp::Ordering;
-use std::convert::TryInto;
+use std::collections::hash_map::Entry;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::mem::size_of;
-use std::ops::{AddAssign, Div, Index, IndexMut};
+use std::ops::{AddAssign, Div, Index};
 use std::{fmt, iter};
 
 #[derive(Clone, Default)]
@@ -207,7 +206,7 @@ impl BitSet {
             .iter_mut()
             .zip(other.as_slice().iter())
         {
-            *x = *x | y;
+            *x |= y;
         }
         self.cardinality = self.bit_vec.count_ones();
     }
@@ -229,7 +228,7 @@ impl BitSet {
             .iter_mut()
             .zip(other.as_slice().iter())
         {
-            *x = *x & y;
+            *x &= y;
         }
         self.cardinality = self.bit_vec.count_ones();
     }
@@ -242,7 +241,7 @@ impl BitSet {
             .iter_mut()
             .zip(other.as_slice().iter())
         {
-            *x = *x & !y;
+            *x &= !y;
         }
         self.cardinality = self.bit_vec.count_ones();
     }
@@ -273,14 +272,8 @@ impl BitSet {
 
     #[inline]
     pub fn has_smaller(&mut self, other: &BitSet) -> Option<bool> {
-        let self_idx = self.get_first_set();
-        if self_idx.is_none() {
-            return None;
-        }
-        let other_idx = other.get_first_set();
-        if other_idx.is_none() {
-            return None;
-        }
+        let self_idx = self.get_first_set()?;
+        let other_idx = other.get_first_set()?;
         Some(self_idx < other_idx)
     }
 
@@ -306,12 +299,12 @@ impl BitSet {
     }
 
     #[inline]
-    pub fn get_next_set(&self, mut idx: usize) -> Option<usize> {
+    pub fn get_next_set(&self, idx: usize) -> Option<usize> {
         if idx >= self.bit_vec.len() {
             return None;
         }
         let mut block_idx = idx / block_size();
-        let mut word_idx = idx % block_size();
+        let word_idx = idx % block_size();
         let mut block = self.bit_vec.as_slice()[block_idx];
         let max = self.bit_vec.as_slice().len();
         block &= usize::MAX << word_idx;
@@ -323,11 +316,11 @@ impl BitSet {
             block = self.bit_vec.as_slice()[block_idx];
         }
         let v = block_idx * block_size() + block.trailing_zeros() as usize;
-        return if v >= self.bit_vec.len() {
+        if v >= self.bit_vec.len() {
             None
         } else {
             Some(v)
-        };
+        }
 
         /*while idx % block_size() != 0 && idx < self.bit_vec.len() {
             if self.bit_vec[idx] {
@@ -420,7 +413,7 @@ impl<'a> Iterator for BitSetIterator<'a> {
         self.block >>= offset;
         self.block >>= 1;
         self.idx += offset + 1;
-        return Some(self.idx - 1);
+        Some(self.idx - 1)
     }
 }
 
@@ -453,32 +446,16 @@ impl BinaryQueue {
         }
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            heap: Vec::with_capacity(capacity),
-            values: FnvHashMap::with_capacity_and_hasher(capacity, Default::default()),
-            indices: FnvHashMap::with_capacity_and_hasher(capacity, Default::default()),
-        }
-    }
-
-    pub fn remove(&mut self, k: usize) {
-        assert!(self.values.contains_key(&k));
-        if !k == 0 {
-            let v = *self.values.get(&self.heap[0]).unwrap() - 1;
-            self.insert(k, v);
-        }
-        self.pop_min();
-    }
-
     pub fn insert(&mut self, element: usize, priority: i64) {
-        if self.values.contains_key(&element) {
-            self.update(element, priority);
-        } else {
-            self.values.insert(element, priority);
-            self.indices.insert(element, self.heap.len());
-            self.heap.push(element);
-            if self.heap.len() > 1 {
-                self.up(self.heap.len() - 1);
+        match self.values.entry(element) {
+            Entry::Occupied(_) => self.update(element, priority),
+            Entry::Vacant(entry) => {
+                entry.insert(priority);
+                self.indices.insert(element, self.heap.len());
+                self.heap.push(element);
+                if self.heap.len() > 1 {
+                    self.up(self.heap.len() - 1);
+                }
             }
         }
     }
@@ -551,7 +528,11 @@ impl BinaryQueue {
     }
 
     fn parent(&self, idx: usize) -> Option<usize> {
-        return if idx == 0 { None } else { Some((idx - 1) / 2) };
+        if idx == 0 {
+            None
+        } else {
+            Some((idx - 1) / 2)
+        }
     }
 
     fn child(&self, idx: usize, child_type: ChildType) -> Option<usize> {
@@ -560,11 +541,11 @@ impl BinaryQueue {
             ChildType::Second => 2,
         };
         let idx = idx * 2 + off;
-        return if idx >= self.heap.len() {
+        if idx >= self.heap.len() {
             None
         } else {
             Some(idx)
-        };
+        }
     }
 }
 
@@ -581,7 +562,6 @@ mod tests {
             bs.set_bit(*i);
         }
 
-        let mut iter = bs.iter();
         let b: Vec<usize> = bs.iter().collect();
         assert_eq!(a, b);
         let mut c = Vec::new();

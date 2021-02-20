@@ -22,16 +22,8 @@ handle-ctrlc=["ctrlc"]
 pace-logging=["log", "env_logger"]
 cli = ["structopt"]
 
-[dev-dependencies]
-criterion = "0.3"
-
-[[bench]]
-name = "benchmark"
-harness = false
-
 [[bin]]
 name = "arboretum-cli"
 path = "src/main.rs"
 required-features = ["cli"]
 test = false
-bench = false

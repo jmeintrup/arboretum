@@ -1,11 +1,10 @@
 use core::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 static SIGINT: AtomicBool = AtomicBool::new(false);
 
 pub fn received_ctrl_c() -> bool {
-    return SIGINT.load(Ordering::SeqCst);
+    SIGINT.load(Ordering::SeqCst)
 }
 
 pub fn initialize() {

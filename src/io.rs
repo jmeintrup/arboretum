@@ -1,4 +1,4 @@
-use crate::graph::Graph;
+use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use crate::tree_decomposition::TreeDecomposition;
@@ -23,23 +23,23 @@ impl<'a, 'b: 'a, T: Write> PaceWriter<'a, 'b, T> {
             bag_count,
             max_bag,
             self.graph.order()
-        );
-        self.tree_decomposition.bags().iter().for_each(|b| {
+        )?;
+        for b in self.tree_decomposition.bags() {
             let mut tmp: Vec<_> = b.vertex_set.iter().copied().collect();
-            tmp.sort();
+            tmp.sort_unstable();
             let vertices: Vec<_> = tmp.iter().map(|i| (i + 1).to_string()).collect();
             let vertices = vertices.iter().fold(String::new(), |mut acc, v| {
                 acc.push_str(v.as_str());
-                acc.push_str(" ");
+                acc.push(' ');
                 acc
             });
-            writeln!(self.writer, "b {} {}", b.id + 1, vertices);
-        });
-        self.tree_decomposition.bags().iter().for_each(|b| {
+            writeln!(self.writer, "b {} {}", b.id + 1, vertices)?;
+        }
+        for b in self.tree_decomposition.bags() {
             for child in b.neighbors.iter().copied().filter(|i| *i > b.id) {
-                writeln!(self.writer, "{} {}", b.id + 1, child + 1);
+                writeln!(self.writer, "{} {}", b.id + 1, child + 1)?;
             }
-        });
+        }
         Ok(())
     }
 
@@ -65,7 +65,7 @@ impl<T: BufRead> TryFrom<PaceReader<T>> for HashMapGraph {
         let mut order: Option<usize> = None;
         for line in reader.lines() {
             let line = line?;
-            let elements: Vec<_> = line.split(" ").collect();
+            let elements: Vec<_> = line.split(' ').collect();
             match elements[0] {
                 "c" => {
                     // who cares about comments..
@@ -103,7 +103,7 @@ impl<T: BufRead> TryFrom<PaceReader<T>> for HashMapGraph {
 fn parse_vertex(v: &str, order: usize) -> Result<usize, std::io::Error> {
     match v.parse::<usize>() {
         Ok(u) => {
-            return if u == 0 || u > order {
+            if u == 0 || u > order {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Invalid vertex label",

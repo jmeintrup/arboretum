@@ -1,18 +1,9 @@
 use crate::datastructures::BitSet;
-use crate::graph::graph::Graph;
-use fnv::{FnvHashMap, FnvHashSet};
-use std::borrow::{Borrow, BorrowMut};
+use crate::graph::base_graph::BaseGraph;
+use fnv::FnvHashMap;
+use std::borrow::Borrow;
 use std::cmp::Ordering;
-use std::collections::hash_map::Entry::{Occupied, Vacant};
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::fmt;
-use std::fmt::{Display, Formatter};
-use std::io::BufRead;
 
-pub type EBCache = HashMap<BitSet, BitSet>;
-pub type CCCache = HashMap<BitSet, Vec<BitSet>>;
-pub type PMCCache = HashMap<BitSet, bool>;
 #[derive(Clone, Debug)]
 pub struct BitGraph {
     graph: Vec<BitSet>,
@@ -33,7 +24,7 @@ impl From<&[BitSet]> for BitGraph {
 }
 
 impl BitGraph {
-    pub fn from_graph<G: Graph>(og_graph: &G, og_to_self: &FnvHashMap<u32, u32>) -> Self {
+    pub fn from_graph<G: BaseGraph>(og_graph: &G, og_to_self: &FnvHashMap<u32, u32>) -> Self {
         let mut graph = vec![BitSet::new(og_graph.order()); og_graph.order()];
 
         for v in og_graph.vertices() {
@@ -61,7 +52,7 @@ impl BitGraph {
     }
 }
 
-impl Graph for BitGraph {
+impl BaseGraph for BitGraph {
     fn degree(&self, u: usize) -> usize {
         self.graph[u].cardinality()
     }

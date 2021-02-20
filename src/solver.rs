@@ -1,29 +1,24 @@
 use crate::exact::TamakiPid;
-use crate::graph::{Graph, HashMapGraph};
+use crate::graph::{BaseGraph, HashMapGraph};
 use crate::heuristic_elimination_order::{
-    HeuristicEliminationDecomposer, MinDegreeDecomposer, MinDegreeSelector, MinFillDecomposer,
-    MinFillDegree, MinFillDegreeSelector, MinFillSelector, Selector,
+    HeuristicEliminationDecomposer, MinDegreeSelector, MinFillDegreeSelector, MinFillSelector,
+    Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
-use crate::macros;
 use crate::rule_based_reducer::RuleBasedPreprocessor;
 use crate::safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits};
-use crate::tree_decomposition::{TreeDecomposition, TreeDecompositionValidationError};
+use crate::tree_decomposition::TreeDecomposition;
 #[cfg(feature = "log")]
 use log::info;
-use std::array;
 use std::cmp::max;
-use std::hash::Hash;
-use std::process::exit;
 
 pub trait DynamicUpperboundHeuristic: AtomSolver {}
 impl<S: Selector> DynamicUpperboundHeuristic for HeuristicEliminationDecomposer<S> {}
 
 pub type Lowerbound = usize;
 pub type Upperbound = usize;
-pub type DynamicUpperbound =
-    fn(&HashMapGraph, Lowerbound, Upperbound) -> Result<TreeDecomposition, ()>;
-pub type DynamicExact = fn(&HashMapGraph, Lowerbound, Upperbound) -> Result<TreeDecomposition, ()>;
+pub type DynamicUpperbound = fn(&HashMapGraph, Lowerbound, Upperbound) -> ComputationResult;
+pub type DynamicExact = fn(&HashMapGraph, Lowerbound, Upperbound) -> ComputationResult;
 pub type DynamicLowerbound = fn(&HashMapGraph) -> usize;
 
 #[derive(Clone, Copy)]
@@ -84,17 +79,17 @@ impl UpperboundHeuristicType {
             UpperboundHeuristicType::MinFill => {
                 let decomposer: HeuristicEliminationDecomposer<MinFillSelector> =
                     HeuristicEliminationDecomposer::with_bounds(&graph, lowerbound, graph.order());
-                Some(decomposer.compute().unwrap())
+                Some(decomposer.compute().computed_tree_decomposition().unwrap())
             }
             UpperboundHeuristicType::MinDegree => {
                 let decomposer: HeuristicEliminationDecomposer<MinDegreeSelector> =
                     HeuristicEliminationDecomposer::with_bounds(&graph, lowerbound, graph.order());
-                Some(decomposer.compute().unwrap())
+                Some(decomposer.compute().computed_tree_decomposition().unwrap())
             }
             UpperboundHeuristicType::MinFillDegree => {
                 let decomposer: HeuristicEliminationDecomposer<MinFillDegreeSelector> =
                     HeuristicEliminationDecomposer::with_bounds(&graph, lowerbound, graph.order());
-                Some(decomposer.compute().unwrap())
+                Some(decomposer.compute().computed_tree_decomposition().unwrap())
             }
             UpperboundHeuristicType::All => {
                 let a = HeuristicEliminationDecomposer::<MinFillSelector>::with_bounds(
@@ -103,6 +98,7 @@ impl UpperboundHeuristicType {
                     graph.order(),
                 )
                 .compute()
+                .computed_tree_decomposition()
                 .unwrap();
                 let b = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_bounds(
                     &graph,
@@ -110,6 +106,7 @@ impl UpperboundHeuristicType {
                     graph.order(),
                 )
                 .compute()
+                .computed_tree_decomposition()
                 .unwrap();
                 let c = HeuristicEliminationDecomposer::<MinFillDegreeSelector>::with_bounds(
                     &graph,
@@ -117,6 +114,7 @@ impl UpperboundHeuristicType {
                     graph.order(),
                 )
                 .compute()
+                .computed_tree_decomposition()
                 .unwrap();
                 let mut best = a;
                 if best.max_bag_size > b.max_bag_size {
@@ -128,7 +126,7 @@ impl UpperboundHeuristicType {
                 Some(best)
             }
             UpperboundHeuristicType::Custom(decomposer) => {
-                Some(decomposer(&graph, lowerbound, graph.order() - 1).unwrap())
+                decomposer(&graph, lowerbound, graph.order() - 1).computed_tree_decomposition()
             }
         }
     }
@@ -156,9 +154,12 @@ impl AtomSolverType {
         sub_graph: &HashMapGraph,
         lowerbound: usize,
         upperbound: usize,
-    ) -> Result<TreeDecomposition, ()> {
+    ) -> ComputationResult {
         match self {
-            AtomSolverType::None => Err(()),
+            AtomSolverType::None => ComputationResult::Bounds(Bounds {
+                lowerbound,
+                upperbound,
+            }),
             AtomSolverType::MinFill => {
                 HeuristicEliminationDecomposer::<MinFillSelector>::with_bounds(
                     sub_graph, lowerbound, upperbound,
@@ -238,7 +239,10 @@ impl Solver {
                         } else {
                             #[cfg(feature = "log")]
                             info!(" Atom too large to be solved exactly");
-                            Err(())
+                            ComputationResult::Bounds(Bounds {
+                                lowerbound,
+                                upperbound,
+                            })
                         }
                     }),
                 ))
@@ -321,7 +325,7 @@ impl Solver {
                 }
                 lowerbound = max(lowerbound, 1);
 
-                let mut reducer: Option<_> = if self.apply_reduction_rules {
+                let reducer: Option<_> = if self.apply_reduction_rules {
                     #[cfg(feature = "log")]
                     info!(" applying reduction rules");
                     let mut tmp = RuleBasedPreprocessor::new(&sub_graph);
@@ -348,7 +352,7 @@ impl Solver {
                 #[cfg(feature = "log")]
                 info!(" solving reduced graph");
 
-                let mut result = SafeSeparatorFramework::default()
+                let result = SafeSeparatorFramework::default()
                     .algorithms(self.algorithm_types)
                     .safe_separator_limits(self.safe_separator_limits)
                     .compute(reduced_graph, lowerbound);
@@ -358,22 +362,23 @@ impl Solver {
                 if self.use_atom_bag_size_for_lowerbound {
                     lowerbound = max(lowerbound, partial_td.max_bag_size - 1);
                 }
-                match
-                    partial_td.verify(reduced_graph) {
+                match partial_td.verify(reduced_graph) {
                     Ok(_) => {
                         #[cfg(feature = "log")]
                         info!(" partial td computed after reduction rules is valid!");
                     }
                     Err(e) => {
-                        panic!(" partial td computed after reduction rules is invalid: {}", e);
+                        panic!(
+                            " partial td computed after reduction rules is invalid: {}",
+                            e
+                        );
                     }
                 }
                 match reducer {
                     None => td.combine_with_or_replace(0, partial_td),
-                    Some(reducer) => td.combine_with_or_replace(
-                        0,
-                        reducer.combine_into_td(partial_td, &sub_graph),
-                    ),
+                    Some(reducer) => {
+                        td.combine_with_or_replace(0, reducer.combine_into_td(partial_td))
+                    }
                 };
             }
         }
@@ -388,5 +393,24 @@ pub trait AtomSolver {
     fn with_bounds(graph: &HashMapGraph, lowerbound: usize, upperbound: usize) -> Self
     where
         Self: Sized;
-    fn compute(self) -> Result<TreeDecomposition, ()>;
+    fn compute(self) -> ComputationResult;
+}
+
+pub struct Bounds {
+    pub lowerbound: usize,
+    pub upperbound: usize,
+}
+
+pub enum ComputationResult {
+    ComputedTreeDecomposition(TreeDecomposition),
+    Bounds(Bounds),
+}
+
+impl ComputationResult {
+    pub fn computed_tree_decomposition(self) -> Option<TreeDecomposition> {
+        match self {
+            ComputationResult::ComputedTreeDecomposition(td) => Some(td),
+            _ => None,
+        }
+    }
 }

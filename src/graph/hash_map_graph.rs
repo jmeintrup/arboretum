@@ -1,19 +1,16 @@
 use crate::datastructures::BitSet;
-use crate::graph::graph::Graph;
+use crate::graph::base_graph::BaseGraph;
 use crate::graph::mutable_graph::MutableGraph;
 use crate::heuristic_elimination_order::{
-    HeuristicEliminationDecomposer, MinDegreeSelector, MinFillSelector, Selector,
+    HeuristicEliminationDecomposer, MinDegreeSelector, MinFillSelector,
 };
-use crate::tree_decomposition::{TreeDecomposition, TreeDecompositionValidationError};
+use crate::tree_decomposition::TreeDecomposition;
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
-use rand::prelude::{SliceRandom, StdRng, ThreadRng};
+use rand::prelude::{SliceRandom, StdRng};
 use rand::{Rng, SeedableRng};
 use std::cmp::{max, min, Ordering};
-use std::collections::{HashSet, VecDeque};
-use std::convert::TryFrom;
-use std::io::BufRead;
-use std::iter::FromIterator;
+use std::collections::VecDeque;
 
 #[cfg(feature = "handle-ctrlc")]
 use crate::signals::received_ctrl_c;
@@ -138,14 +135,14 @@ impl HashMapGraph {
                         return Some(set);
                     }
                     // check if graph contains vertex v with N(v) = {p, f1, f2}
-                    if self
+                    let not_found = self
                         .data
                         .iter()
                         .find(|(_, v)| {
                             v.len() == 3 && v.contains(&p) && v.contains(&f1) && v.contains(&f2)
                         })
-                        .is_none()
-                    {
+                        .is_none();
+                    if not_found {
                         let mut set: FnvHashSet<usize> = FnvHashSet::default();
                         set.insert(f1);
                         set.insert(f2);
@@ -183,6 +180,7 @@ impl HashMapGraph {
     ) -> Option<MinorSafeResult> {
         let mut new_td = HeuristicEliminationDecomposer::<MinFillSelector>::with_graph(&self)
             .compute()
+            .computed_tree_decomposition()
             .unwrap();
         new_td.flatten();
         if let Some(result) = self.minor_safe_helper(new_td, max_tries, max_missing, seed) {
@@ -190,9 +188,10 @@ impl HashMapGraph {
         } else {
             let mut new_td = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
                 .compute()
+                .computed_tree_decomposition()
                 .unwrap();
             new_td.flatten();
-            return self.minor_safe_helper(new_td, max_tries, max_missing, seed);
+            self.minor_safe_helper(new_td, max_tries, max_missing, seed)
         }
     }
 
@@ -203,7 +202,7 @@ impl HashMapGraph {
         max_tries: usize,
         max_missing: usize,
     ) -> Option<MinorSafeResult> {
-        return match tree_decomposition {
+        match tree_decomposition {
             None => self.no_match_minor_helper(max_tries, max_missing, seed),
             Some(working_td) => {
                 match self.minor_safe_helper(working_td, max_tries, max_missing, seed) {
@@ -211,7 +210,7 @@ impl HashMapGraph {
                     Some(result) => Some(result),
                 }
             }
-        };
+        }
     }
 
     fn minor_safe_helper(
@@ -316,7 +315,7 @@ impl HashMapGraph {
                         .copied()
                         .filter(|x| !separator.contains(x) && tmp.data.get(&v).unwrap().contains(x))
                         .collect();
-                    if common_neighbors.len() > 0 {
+                    if !common_neighbors.is_empty() {
                         let idx: usize = rng.gen_range(0, common_neighbors.len());
                         let contractor = common_neighbors[idx];
                         if rng.gen_bool(0.5) {
@@ -348,8 +347,8 @@ impl HashMapGraph {
                             }
                         }
                         let value = pre.get(&u);
-                        if value.is_some() {
-                            let mut current = *value.unwrap();
+                        if let Some(current) = value {
+                            let mut current = *current;
                             while current != v {
                                 tmp.contract(current, u);
                                 current = *pre.get(&current).unwrap();
@@ -394,17 +393,14 @@ impl HashMapGraph {
             && components
                 .iter()
                 .find(|component| {
-                    separator
-                        .iter()
-                        .find(|v| {
-                            self.data
-                                .get(v)
-                                .unwrap()
-                                .iter()
-                                .find(|u| component.contains(u))
-                                .is_none()
-                        })
-                        .is_some()
+                    separator.iter().any(|v| {
+                        self.data
+                            .get(v)
+                            .unwrap()
+                            .iter()
+                            .find(|u| component.contains(u))
+                            .is_none()
+                    })
                 })
                 .is_none()
     }
@@ -432,40 +428,6 @@ impl HashMapGraph {
         self.clique_minimal_separator_helper(&empty)
     }
 
-    fn closed_neighborhood_helper(
-        &self,
-        component: &FnvHashSet<usize>,
-        separator: &FnvHashSet<usize>,
-    ) -> FnvHashSet<usize> {
-        if component.is_empty() || separator.is_empty() || self.data.is_empty() {
-            return FnvHashSet::default();
-        }
-        let mut closed_neighborhood: FnvHashSet<_> = FnvHashSet::default();
-
-        let mut stack: Vec<_> = Vec::with_capacity(component.len());
-        let mut visited: FnvHashSet<_> = FnvHashSet::with_capacity_and_hasher(
-            component.len() + separator.len(),
-            Default::default(),
-        );
-        let first = component.iter().copied().next().unwrap();
-        stack.push(first);
-        visited.insert(first);
-
-        while let Some(v) = stack.pop() {
-            for x in self.data.get(&v).unwrap().iter() {
-                if visited.contains(x) {
-                    continue;
-                }
-                if separator.contains(x) {
-                    closed_neighborhood.insert(*x);
-                    visited.insert(*x);
-                }
-                stack.push(*x);
-            }
-        }
-        closed_neighborhood
-    }
-
     fn clique_minimal_separator_helper(
         &self,
         ignore: &FnvHashSet<usize>,
@@ -475,7 +437,7 @@ impl HashMapGraph {
         for v in ignore.iter().copied() {
             working_graph.remove_vertex(v);
         }
-        let mut h = self.clone();
+        let mut triangulated_graph = self.clone();
 
         let mut alpha = Vec::with_capacity(self.data.len());
         let mut generators: FnvHashSet<usize> = FnvHashSet::default();
@@ -484,8 +446,8 @@ impl HashMapGraph {
 
         let mut s: Option<usize> = None;
 
-        let n = self.order() - ignore.len();
-        for _ in 0..n {
+        let working_order = self.order() - ignore.len();
+        for _ in 0..working_order {
             #[cfg(feature = "handle-ctrlc")]
             if received_ctrl_c() {
                 return None;
@@ -503,14 +465,15 @@ impl HashMapGraph {
 
             let mut reached: FnvHashSet<_> = FnvHashSet::default();
             reached.insert(x);
-            let mut reach: FnvHashMap<usize, FnvHashSet<usize>> =
-                (0..n).map(|i| (i, FnvHashSet::default())).collect();
+            let mut reach: FnvHashMap<usize, FnvHashSet<usize>> = (0..working_order)
+                .map(|i| (i, FnvHashSet::default()))
+                .collect();
             working_graph.data.get(&x).unwrap().iter().for_each(|i| {
                 reached.insert(*i);
                 reach.get_mut(labels.get(i).unwrap()).unwrap().insert(*i);
             });
 
-            for j in 0..n {
+            for j in 0..working_order {
                 while !reach.get(&j).unwrap().is_empty() {
                     let r = *reach.get(&j).unwrap().iter().next().unwrap();
                     reach.get_mut(&j).unwrap().remove(&r);
@@ -530,7 +493,7 @@ impl HashMapGraph {
             }
 
             for y in y.iter() {
-                h.add_edge(x, *y);
+                triangulated_graph.add_edge(x, *y);
                 *labels.get_mut(y).unwrap() += 1;
             }
 
@@ -540,7 +503,7 @@ impl HashMapGraph {
 
         for x in alpha.iter().copied().rev() {
             if generators.contains(&x) {
-                let s = h.data.get(&x).unwrap();
+                let s = triangulated_graph.data.get(&x).unwrap();
                 let mut is_clique = true;
                 for v in s.iter() {
                     for u in s.iter().filter(|u| *u > v) {
@@ -557,7 +520,7 @@ impl HashMapGraph {
                     return Some(s.clone());
                 }
             }
-            h.remove_vertex(x);
+            triangulated_graph.remove_vertex(x);
         }
         None
     }
@@ -567,8 +530,7 @@ impl HashMapGraph {
 
         let mut stack: Vec<_> = Vec::with_capacity(self.data.len());
         let mut visited = FnvHashSet::with_capacity_and_hasher(self.data.len(), Default::default());
-        let mut iter = self.data.keys().copied();
-        while let Some(u) = iter.next() {
+        for u in self.data.keys().copied() {
             if separator.contains(&u) || visited.contains(&u) {
                 continue;
             }
@@ -608,40 +570,47 @@ impl HashMapGraph {
         &self,
         u: usize,
         v: usize,
-        c: &mut usize,
-        l: &mut FnvHashMap<usize, usize>,
-        d: &mut FnvHashMap<usize, usize>,
+        count: &mut usize,
+        vertex_to_count: &mut FnvHashMap<usize, usize>,
+        discovered: &mut FnvHashMap<usize, usize>,
         ignore: &FnvHashSet<usize>,
     ) -> Option<usize> {
         #[cfg(feature = "handle-ctrlc")]
         if received_ctrl_c() {
             return None;
         }
-        *c += 1;
+        *count += 1;
         let mut children = 0;
-        l.insert(v, *c);
-        d.insert(v, *c);
+        vertex_to_count.insert(v, *count);
+        discovered.insert(v, *count);
         let nb = self.data.get(&v).unwrap();
         for w in nb.iter().filter(|w| !ignore.contains(*w)) {
-            if !d.contains_key(w) {
+            if !discovered.contains_key(w) {
                 children += 1;
-                if let Some(cut) = self.articulation_point_helper(v, *w, c, l, d, ignore) {
+                if let Some(cut) = self.articulation_point_helper(
+                    v,
+                    *w,
+                    count,
+                    vertex_to_count,
+                    discovered,
+                    ignore,
+                ) {
                     return Some(cut);
                 }
                 #[cfg(feature = "handle-ctrlc")]
                 if received_ctrl_c() {
                     return None;
                 }
-                let a = *l.get(&v).unwrap();
-                let b = *l.get(&w).unwrap();
-                l.insert(v, min(a, b));
-                if l.get(&w).unwrap() >= d.get(&v).unwrap() && u != v {
+                let v_to_count = *vertex_to_count.get(&v).unwrap();
+                let w_to_count = *vertex_to_count.get(&w).unwrap();
+                vertex_to_count.insert(v, min(v_to_count, w_to_count));
+                if vertex_to_count.get(&w).unwrap() >= discovered.get(&v).unwrap() && u != v {
                     return Some(v);
                 }
-            } else if *w != u && d.get(&w).unwrap() < d.get(&v).unwrap() {
-                let a = *l.get(&v).unwrap();
-                let b = *d.get(&w).unwrap();
-                l.insert(v, min(a, b));
+            } else if *w != u && discovered.get(&w).unwrap() < discovered.get(&v).unwrap() {
+                let v_to_count = *vertex_to_count.get(&v).unwrap();
+                let w_to_count = *discovered.get(&w).unwrap();
+                vertex_to_count.insert(v, min(v_to_count, w_to_count));
             }
         }
         if u == v && children > 1 {
@@ -674,18 +643,13 @@ impl<'a> Iterator for HashMapGraphDfs<'a> {
 
 impl MutableGraph for HashMapGraph {
     fn add_vertex(&mut self, u: usize) {
-        if !self.data.contains_key(&u) {
-            self.data.insert(u, FnvHashSet::default());
-        }
+        self.data.entry(u).or_insert_with(FnvHashSet::default);
     }
 
     fn add_vertex_with_capacity(&mut self, u: usize, capacity: usize) {
-        if !self.data.contains_key(&u) {
-            self.data.insert(
-                u,
-                FnvHashSet::with_capacity_and_hasher(capacity, Default::default()),
-            );
-        }
+        self.data
+            .entry(u)
+            .or_insert_with(|| FnvHashSet::with_capacity_and_hasher(capacity, Default::default()));
     }
 
     fn remove_vertex(&mut self, u: usize) {
@@ -698,9 +662,9 @@ impl MutableGraph for HashMapGraph {
 
     fn add_edge(&mut self, u: usize, v: usize) {
         assert_ne!(u, v);
-        let first = self.data.entry(u).or_insert(FnvHashSet::default());
+        let first = self.data.entry(u).or_insert_with(FnvHashSet::default);
         first.insert(v);
-        let second = self.data.entry(v).or_insert(FnvHashSet::default());
+        let second = self.data.entry(v).or_insert_with(FnvHashSet::default);
         second.insert(u);
     }
 
@@ -763,7 +727,7 @@ impl MutableGraph for HashMapGraph {
     }
 }
 
-impl Graph for HashMapGraph {
+impl BaseGraph for HashMapGraph {
     fn degree(&self, u: usize) -> usize {
         assert!(self.data.contains_key(&u));
         self.data.get(&u).unwrap().len()
@@ -790,7 +754,7 @@ impl Graph for HashMapGraph {
 
     fn is_neighborhood_clique(&self, u: usize) -> bool {
         let nb = self.data.get(&u).unwrap();
-        self.is_clique(Vec::from_iter(nb.iter().copied()).as_slice())
+        self.is_clique(&nb.iter().copied().collect::<Vec<_>>())
     }
 
     fn has_edge(&self, u: usize, v: usize) -> bool {
@@ -798,7 +762,7 @@ impl Graph for HashMapGraph {
     }
 
     fn is_simplicial(&self, u: usize) -> bool {
-        return self.is_neighborhood_clique(u);
+        self.is_neighborhood_clique(u)
     }
 
     fn is_almost_simplicial(&self, u: usize) -> bool {
@@ -820,7 +784,7 @@ impl Graph for HashMapGraph {
                 }
             }
         }
-        (check.is_none() && check.unwrap().len() == 1)
+        check.is_none() && check.unwrap().len() == 1
     }
 
     fn vertices(&self) -> Box<dyn Iterator<Item = usize> + '_> {
@@ -870,7 +834,7 @@ impl Graph for HashMapGraph {
 }
 
 impl HashMapGraph {
-    pub fn from_graph<G: Graph>(graph: &G) -> Self {
+    pub fn from_graph<G: BaseGraph>(graph: &G) -> Self {
         let data = graph
             .vertices()
             .map(|v| (v, graph.neighborhood(v).collect()))
@@ -881,7 +845,7 @@ impl HashMapGraph {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::graph::Graph;
+    use crate::graph::base_graph::BaseGraph;
     use crate::graph::hash_map_graph::HashMapGraph;
     use crate::graph::mutable_graph::MutableGraph;
 
@@ -920,7 +884,9 @@ mod tests {
 
         graph.remove_edge(0, 1);
 
-        assert_eq!(graph.order(), 0);
+        assert_eq!(graph.degree(0), 0);
+        assert_eq!(graph.degree(1), 0);
+        assert_eq!(graph.order(), 2);
     }
 
     #[test]

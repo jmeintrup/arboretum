@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
-pub trait Graph: Clone + Debug {
+pub trait BaseGraph: Clone + Debug {
     fn degree(&self, u: usize) -> usize;
     fn order(&self) -> usize;
     fn is_clique(&self, vertices: &[usize]) -> bool;

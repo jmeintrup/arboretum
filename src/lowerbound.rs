@@ -1,8 +1,7 @@
-use crate::graph::Graph;
+use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use std::cmp::max;
-use std::collections::HashSet;
 
 #[cfg(feature = "handle-ctrlc")]
 use crate::signals::received_ctrl_c;

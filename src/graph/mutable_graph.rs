@@ -1,6 +1,6 @@
-use crate::graph::graph::Graph;
+use crate::graph::base_graph::BaseGraph;
 
-pub trait MutableGraph: Graph {
+pub trait MutableGraph: BaseGraph {
     fn add_vertex(&mut self, u: usize);
     fn add_vertex_with_capacity(&mut self, u: usize, capacity: usize);
     fn remove_vertex(&mut self, u: usize);
