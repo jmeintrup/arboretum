@@ -23,6 +23,13 @@ struct Cache {
     pub block_cache: BlockCache,
 }
 
+struct DPHelpers<'a> {
+    cache: &'a mut Cache,
+    ready_queue: &'a mut VecDeque<IBlock>,
+    pending_endorsers: &'a mut Vec<PMC>,
+    solution: &'a mut Option<PMC>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct HeapBitset {
     bit_set: BitSet,
@@ -173,12 +180,15 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                 let pmc = PMC::new(closed_neighborhood, &blocks, self.graph.borrow());
 
                 if pmc.valid {
-                    if pmc.ready(&mut self.cache.i_block_cache) {
+                    if pmc.ready(&self.cache.i_block_cache) {
                         pmc.endorse(
                             &self.graph,
-                            &mut self.cache,
-                            &mut self.ready_queue,
-                            &mut self.solution,
+                            DPHelpers {
+                                cache: &mut &mut self.cache,
+                                ready_queue: &mut self.ready_queue,
+                                pending_endorsers: &mut self.pending_endorsers,
+                                solution: &mut self.solution,
+                            },
                         );
                     } else {
                         self.pending_endorsers.push(pmc);
@@ -201,10 +211,12 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                         &mut o_block_sieve,
                         self.target_width as usize,
                         &self.graph,
-                        &mut self.cache,
-                        &mut self.ready_queue,
-                        &mut self.pending_endorsers,
-                        &mut self.solution,
+                        DPHelpers {
+                            cache: &mut self.cache,
+                            ready_queue: &mut self.ready_queue,
+                            pending_endorsers: &mut self.pending_endorsers,
+                            solution: &mut self.solution,
+                        },
                     );
 
                     if self.solution.is_some() {
@@ -214,7 +226,7 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                     }
                 }
 
-                let endorsers = std::mem::replace(&mut self.pending_endorsers, Default::default());
+                let endorsers = std::mem::take(&mut self.pending_endorsers);
                 for endorser in endorsers {
                     #[cfg(feature = "handle-ctrlc")]
                     if crate::signals::received_ctrl_c() {
@@ -227,9 +239,12 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                     if endorser.ready(&self.cache.i_block_cache) {
                         endorser.endorse(
                             &self.graph,
-                            &mut self.cache,
-                            &mut self.ready_queue,
-                            &mut self.solution,
+                            DPHelpers {
+                                cache: &mut self.cache,
+                                ready_queue: &mut self.ready_queue,
+                                pending_endorsers: &mut self.pending_endorsers,
+                                solution: &mut self.solution,
+                            },
                         );
                     } else {
                         self.pending_endorsers.push(endorser);
@@ -246,10 +261,10 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
             }
             self.target_width += 1;
         }
-        return ComputationResult::Bounds(Bounds {
+        ComputationResult::Bounds(Bounds {
             lowerbound: self.target_width,
             upperbound: self.upper_bound,
-        });
+        })
     }
 }
 
@@ -315,7 +330,7 @@ impl Block {
             }
             if separator.is_subset_of(&c) {
                 if v_value < min_compo {
-                    let mut o = c.clone();
+                    let mut o = c;
                     o.and_not(&separator);
                     outbound = Some(o);
                 } else {
@@ -326,12 +341,11 @@ impl Block {
             rest.and_not(&c);
             v = rest.get_next_set(v_value + 1);
         }
-        let r = Self {
+        Self {
             component,
             separator,
             outbound,
-        };
-        r
+        }
     }
 
     pub fn outbound(&self) -> bool {
@@ -457,13 +471,10 @@ impl PMC {
         true
     }
 
-    pub fn endorse(
-        &self,
-        graph: &BitGraph,
-        cache: &mut Cache,
-        ready_queue: &mut VecDeque<IBlock>,
-        solution: &mut Option<PMC>,
-    ) {
+    pub fn endorse(&self, graph: &BitGraph, dp_helpers: DPHelpers) {
+        let cache = dp_helpers.cache;
+        let ready_queue = dp_helpers.ready_queue;
+        let solution = dp_helpers.solution;
         if self.outbound.is_some() {
             let mut target = self.vertex_set.clone();
             target.and_not(&self.outbound.as_ref().unwrap().separator);
@@ -537,11 +548,13 @@ impl IBlock {
         o_block_sieve: &mut LayeredSieve,
         target_width: usize,
         graph: &BitGraph,
-        cache: &mut Cache,
-        ready_queue: &mut VecDeque<IBlock>,
-        pending_endorsers: &mut Vec<PMC>,
-        solution: &mut Option<PMC>,
+        dp_helpers: DPHelpers,
     ) {
+        let cache = dp_helpers.cache;
+        let ready_queue = dp_helpers.ready_queue;
+        let pending_endorsers = dp_helpers.pending_endorsers;
+        let solution = dp_helpers.solution;
+
         let o_block = cache.o_block_cache.get(&self.block.separator);
         if o_block.is_none() {
             let o_block = OBlock::new(
@@ -558,10 +571,12 @@ impl IBlock {
             o_block.process(
                 graph,
                 target_width,
-                cache,
-                ready_queue,
-                pending_endorsers,
-                solution,
+                DPHelpers {
+                    cache,
+                    ready_queue,
+                    pending_endorsers,
+                    solution,
+                },
             );
         }
 
@@ -576,19 +591,18 @@ impl IBlock {
                     open_component: Default::default(),
                 },
             );
-            match tmp.combine(
+            if let Some(v) = tmp.combine(
                 self,
                 target_width,
                 graph,
-                cache,
-                ready_queue,
-                pending_endorsers,
-                solution,
+                DPHelpers {
+                    cache,
+                    ready_queue,
+                    pending_endorsers,
+                    solution,
+                },
             ) {
-                Some(v) => {
-                    to_add.push(v);
-                }
-                _ => {}
+                to_add.push(v);
             };
             let o_block = cache.o_block_cache.get_mut(sep).unwrap();
             *o_block = tmp;
@@ -620,22 +634,17 @@ impl Debug for OBlock {
 
 impl OBlock {
     pub fn new(separator: BitSet, open_component: BitSet) -> Self {
-        let tmp = Self {
+        Self {
             separator,
             open_component,
-        };
-        tmp
+        }
     }
 
-    pub fn process(
-        &self,
-        graph: &BitGraph,
-        target_width: usize,
-        cache: &mut Cache,
-        ready_queue: &mut VecDeque<IBlock>,
-        pending_endorsers: &mut Vec<PMC>,
-        solution: &mut Option<PMC>,
-    ) {
+    pub fn process(&self, graph: &BitGraph, target_width: usize, dp_helpers: DPHelpers) {
+        let cache = dp_helpers.cache;
+        let ready_queue = dp_helpers.ready_queue;
+        let pending_endorsers = dp_helpers.pending_endorsers;
+        let solution = dp_helpers.solution;
         for v in self.separator.iter() {
             let mut new_separator = self.separator.clone();
             let mut nb = graph.neighborhood_as_bitset(v).clone();
@@ -648,7 +657,15 @@ impl OBlock {
 
                 if pmc.valid {
                     if pmc.ready(&cache.i_block_cache) {
-                        pmc.endorse(graph, cache, ready_queue, solution);
+                        pmc.endorse(
+                            graph,
+                            DPHelpers {
+                                cache,
+                                ready_queue,
+                                pending_endorsers,
+                                solution,
+                            },
+                        );
                     } else {
                         pending_endorsers.push(pmc);
                     }
@@ -662,11 +679,13 @@ impl OBlock {
         i_block: &IBlock,
         target_width: usize,
         graph: &BitGraph,
-        cache: &mut Cache,
-        ready_queue: &mut VecDeque<IBlock>,
-        pending_endorsers: &mut Vec<PMC>,
-        solution: &mut Option<PMC>,
+        dp_helpers: DPHelpers,
     ) -> Option<(BitSet, BitSet)> {
+        let cache = dp_helpers.cache;
+        let ready_queue = dp_helpers.ready_queue;
+        let pending_endorsers = dp_helpers.pending_endorsers;
+        let solution = dp_helpers.solution;
+
         let mut new_separator = self.separator.clone();
         new_separator.or(i_block.block.separator.borrow());
         if new_separator.cardinality() > target_width + 1 {
@@ -689,7 +708,15 @@ impl OBlock {
             let pmc = PMC::new(new_separator, &blocks, graph);
             if pmc.valid {
                 if pmc.ready(&cache.i_block_cache) {
-                    pmc.endorse(graph, cache, ready_queue, solution);
+                    pmc.endorse(
+                        graph,
+                        DPHelpers {
+                            cache,
+                            ready_queue,
+                            pending_endorsers,
+                            solution,
+                        },
+                    );
                 } else {
                     pending_endorsers.push(pmc);
                 }
@@ -710,10 +737,12 @@ impl OBlock {
                 o_block.process(
                     graph,
                     target_width,
-                    cache,
-                    ready_queue,
-                    pending_endorsers,
-                    solution,
+                    DPHelpers {
+                        cache,
+                        ready_queue,
+                        pending_endorsers,
+                        solution,
+                    },
                 );
                 return Some((
                     full_block.as_ref().unwrap().component.clone(),

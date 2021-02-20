@@ -424,7 +424,7 @@ mod tests {
     use crate::graph::BaseGraph;
     use crate::graph::HashMapGraph;
     use crate::graph::MutableGraph;
-    use crate::heuristic_elimination_order::{DistanceTwoNeighbors, MinFillSelector, Selector};
+    use crate::heuristic_elimination_order::{MinFillSelector, Selector};
     use crate::io::PaceReader;
     use fnv::FnvHashMap;
     use std::convert::TryFrom;
@@ -442,7 +442,7 @@ mod tests {
         d.push("dimacs_anna.gr");
 
         let f = File::open(d).unwrap();
-        let mut reader = BufReader::new(f);
+        let reader = BufReader::new(f);
         let reader = PaceReader(reader);
         let graph = HashMapGraph::try_from(reader).unwrap();
 
@@ -470,7 +470,7 @@ mod tests {
         d.push("dimacs_anna.gr");
 
         let f = File::open(d).unwrap();
-        let mut reader = BufReader::new(f);
+        let reader = BufReader::new(f);
         let reader = PaceReader(reader);
         let mut graph = HashMapGraph::try_from(reader).unwrap();
         let mut selector = MinFillSelector::from(graph.clone());
@@ -482,9 +482,9 @@ mod tests {
             selector.eliminate_vertex(v);
 
             let mut a: Vec<_> = selector.graph.vertices().collect();
-            a.sort();
+            a.sort_unstable();
             let mut b: Vec<_> = graph.vertices().collect();
-            b.sort();
+            b.sort_unstable();
             assert_eq!(a, b);
             let fc1: FnvHashMap<_, _> = vertices
                 .iter()
@@ -496,33 +496,5 @@ mod tests {
                 assert_eq!(fc1.get(v).unwrap(), fc2.get(v).unwrap());
             }
         }
-    }
-
-    #[test]
-    fn distance_two() {
-        let mut graph = HashMapGraph::new();
-        // direct neighbors of 0
-        graph.add_edge(0, 1);
-        graph.add_edge(0, 2);
-        graph.add_edge(0, 3);
-        graph.add_edge(0, 4);
-
-        // distance two neighbors of 0
-        graph.add_edge(1, 5);
-        graph.add_edge(2, 6);
-        graph.add_edge(3, 7);
-        graph.add_edge(4, 8);
-
-        // to be ignored
-        graph.add_edge(3, 4);
-        graph.add_edge(8, 9);
-        graph.add_edge(5, 9);
-
-        let distance_two_neighbors = DistanceTwoNeighbors::new(&graph, 0);
-        assert_eq!(distance_two_neighbors.0.len(), 4);
-        assert!(distance_two_neighbors.0.contains(&5));
-        assert!(distance_two_neighbors.0.contains(&6));
-        assert!(distance_two_neighbors.0.contains(&7));
-        assert!(distance_two_neighbors.0.contains(&8));
     }
 }
