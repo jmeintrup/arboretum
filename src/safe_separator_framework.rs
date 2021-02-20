@@ -463,10 +463,10 @@ impl Default for SafeSeparatorLimits {
     fn default() -> Self {
         Self {
             size_one_separator: 100_000,
-            size_two_separator: 1_000,
-            size_three_separator: 300,
+            size_two_separator: 2_000,
+            size_three_separator: 250,
             clique_separator: 10_000,
-            almost_clique_separator: 300,
+            almost_clique_separator: 250,
             minor_safe_separator: 10_000,
             minor_safe_separator_max_missing: 1_000,
             minor_safe_separator_tries: 25,
