@@ -1,13 +1,11 @@
-use crate::graph::Graph;
+use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::solver::{
-    AlgorithmTypes
-};
-use crate::tree_decomposition::{TreeDecomposition};
+use crate::solver::{AlgorithmTypes, ComputationResult};
+use crate::tree_decomposition::TreeDecomposition;
 use fnv::{FnvHashMap, FnvHashSet};
-use std::borrow::{Borrow};
-use std::cell::{Cell};
+use std::borrow::Borrow;
+use std::cell::Cell;
 use std::cmp::max;
 use std::rc::Rc;
 
@@ -98,7 +96,7 @@ impl<'a> SearchState<'a> {
             let partial = search_sate.search();
             td.combine_with(root, partial);
         }
-        return td;
+        td
     }
 
     pub fn search(mut self) -> TreeDecomposition {
@@ -150,7 +148,10 @@ impl<'a> SearchState<'a> {
             #[cfg(feature = "handle-ctrlc")]
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
-                return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
+                return match self.upperbound_td {
+                    None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                    Some(upperbound_td) => upperbound_td,
+                };
             }
             if let Some(result) = self.graph.find_minor_safe_separator(
                 self.upperbound_td.clone(),
@@ -205,7 +206,7 @@ impl<'a> SearchState<'a> {
                             .copied()
                             .collect();
                     }
-                    if partial_heuristic_bags.len() == 0 {
+                    if partial_heuristic_bags.is_empty() {
                         let search_sate = self.fork(graph, None);
 
                         let partial = search_sate.search();
@@ -234,8 +235,10 @@ impl<'a> SearchState<'a> {
             while !self.delayed_separation_levels.is_empty() {
                 #[cfg(feature = "handle-ctrlc")]
                 if crate::signals::received_ctrl_c() {
-                    // unknown lowerbound
-                    return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()));
+                    return match self.upperbound_td {
+                        None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                        Some(upperbound_td) => upperbound_td,
+                    };
                 }
                 match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
                     SeparatorSearchResult::Some(separator) => {
@@ -257,10 +260,10 @@ impl<'a> SearchState<'a> {
         self.separation_level = SeparationLevel::Atomic;
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
-            // unknown lowerbound
-            return self.upperbound_td.unwrap_or(TreeDecomposition::with_root(
-                self.graph.vertices().collect(),
-            ));
+            return match self.upperbound_td {
+                None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                Some(upperbound_td) => upperbound_td,
+            };
         }
 
         let mut log_state = self.log_state.get();
@@ -275,9 +278,10 @@ impl<'a> SearchState<'a> {
             // unknown lowerbound
             return match upperbound_td {
                 Some(td) => td,
-                None => {
-                    self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect()))
-                }
+                None => match self.upperbound_td {
+                    None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                    Some(upperbound_td) => upperbound_td,
+                },
             };
         }
         let upperbound = match &upperbound_td {
@@ -312,18 +316,22 @@ impl<'a> SearchState<'a> {
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
             // unknown lowerbound
-            return upperbound_td.unwrap_or(TreeDecomposition::with_root(
-                self.graph.vertices().collect(),
-            ));
+            return match upperbound_td {
+                Some(upperbound_td) => upperbound_td,
+                None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+            };
         }
         match self
             .algorithms
             .atom_solver
             .compute(self.graph.borrow(), lowerbound, upperbound)
         {
-            Ok(td) => td,
-            Err(_) => match upperbound_td {
-                None => self.upperbound_td.unwrap_or(TreeDecomposition::with_root(self.graph.vertices().collect())),
+            ComputationResult::ComputedTreeDecomposition(td) => td,
+            _ => match upperbound_td {
+                None => match self.upperbound_td {
+                    Some(upperbound_td) => upperbound_td,
+                    None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                },
                 Some(td) => td,
             },
         }

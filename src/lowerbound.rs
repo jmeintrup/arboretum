@@ -1,4 +1,4 @@
-use crate::graph::Graph;
+use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use std::cmp::max;

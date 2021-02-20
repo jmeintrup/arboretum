@@ -1,5 +1,5 @@
 use crate::datastructures::BitSet;
-use crate::graph::Graph;
+use crate::graph::BaseGraph;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::cmp::max;
 use std::fmt;
@@ -252,7 +252,7 @@ impl TreeDecomposition {
     }
 
     pub fn combine_with_or_replace(&mut self, glue_point: usize, other: TreeDecomposition) {
-        if self.bags.len() == 0 || (self.bags.len() == 1 && self.bags[0].vertex_set.is_empty()) {
+        if self.bags.is_empty() || (self.bags.len() == 1 && self.bags[0].vertex_set.is_empty()) {
             *self = other;
         } else {
             self.combine_with(glue_point, other);
@@ -277,7 +277,7 @@ impl TreeDecomposition {
         self.bags.extend(other.bags.drain(..));
     }
 
-    pub fn verify<G: Graph>(&self, graph: &G) -> Result<(), TreeDecompositionValidationError> {
+    pub fn verify<G: BaseGraph>(&self, graph: &G) -> Result<(), TreeDecompositionValidationError> {
         if !self.is_connected() {
             return Err(TreeDecompositionValidationError::NotConnected);
         }
@@ -334,7 +334,7 @@ impl TreeDecomposition {
         false
     }
 
-    fn get_missing_vertex<G: Graph>(&self, graph: &G) -> Option<usize> {
+    fn get_missing_vertex<G: BaseGraph>(&self, graph: &G) -> Option<usize> {
         let mut vertices: FnvHashSet<usize> = graph.vertices().collect();
         self.bags.iter().for_each(|b| {
             b.vertex_set.iter().for_each(|x| {
@@ -342,31 +342,31 @@ impl TreeDecomposition {
             })
         });
         if vertices.is_empty() {
-            return None;
+            None
         } else {
             Some(*vertices.iter().next().unwrap())
         }
     }
 
-    fn get_missing_edge<G: Graph>(&self, graph: &G) -> Option<(usize, usize)> {
+    fn get_missing_edge<G: BaseGraph>(&self, graph: &G) -> Option<(usize, usize)> {
         for u in graph.vertices() {
             for v in graph.vertices() {
-                if u < v && graph.has_edge(u, v) {
-                    if self
+                if u < v
+                    && graph.has_edge(u, v)
+                    && self
                         .bags
                         .iter()
                         .find(|b| b.vertex_set.contains(&u) && b.vertex_set.contains(&v))
                         .is_none()
-                    {
-                        return Some((u, v));
-                    }
+                {
+                    return Some((u, v));
                 }
             }
         }
         None
     }
 
-    fn get_vertex_not_inducing_subtree<G: Graph>(&self, graph: &G) -> Option<usize> {
+    fn get_vertex_not_inducing_subtree<G: BaseGraph>(&self, graph: &G) -> Option<usize> {
         for u in graph.vertices() {
             let mut inducing_bags: FnvHashSet<usize> = self
                 .bags

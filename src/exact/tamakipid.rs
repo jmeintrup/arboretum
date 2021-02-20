@@ -1,13 +1,13 @@
 use crate::datastructures::BitSet;
+use crate::graph::BaseGraph;
 use crate::graph::BitGraph;
-use crate::graph::Graph;
 use crate::graph::HashMapGraph;
-use crate::solver::AtomSolver;
+use crate::solver::{AtomSolver, Bounds, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::borrow::{Borrow, BorrowMut};
 use std::cmp::Ordering;
-use std::collections::{VecDeque};
+use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
@@ -52,7 +52,7 @@ impl From<HeapBitset> for BitSet {
     }
 }
 
-pub struct TamakiPid<G: Graph> {
+pub struct TamakiPid<G: BaseGraph> {
     phantom: PhantomData<G>,
     self_to_og: Vec<u32>,
     graph: BitGraph,
@@ -65,7 +65,7 @@ pub struct TamakiPid<G: Graph> {
     cache: Cache,
 }
 
-impl<G: Graph> TamakiPid<G> {
+impl<G: BaseGraph> TamakiPid<G> {
     fn create_tree_decomposition(&self) -> TreeDecomposition {
         let pmc = self.solution.as_ref().unwrap().clone();
         let mut td = TreeDecomposition::default();
@@ -82,7 +82,7 @@ impl<G: Graph> TamakiPid<G> {
             .collect()
     }
 
-    fn td_rec(&self, parent: usize, td: &mut TreeDecomposition, pmc: &PMC) -> () {
+    fn td_rec(&self, parent: usize, td: &mut TreeDecomposition, pmc: &PMC) {
         let children = pmc.inbounds.clone();
         for c in children
             .iter()
@@ -130,7 +130,7 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
         }
     }
 
-    fn compute(mut self) -> Result<TreeDecomposition, ()> {
+    fn compute(mut self) -> ComputationResult {
         if self.graph.order() <= 2 {
             let mut td = TreeDecomposition::default();
             if self.graph.order() > 0 {
@@ -139,17 +139,21 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                     .collect();
                 td.add_bag(vertex_set);
             }
-            return Ok(td);
+            return ComputationResult::ComputedTreeDecomposition(td);
         }
 
         while self.target_width < self.upper_bound {
             #[cfg(feature = "handle-ctrlc")]
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
-                return Err(());
+                return ComputationResult::Bounds(Bounds {
+                    lowerbound: self.target_width,
+                    upperbound: self.upper_bound,
+                });
             }
             self.cache.o_block_cache = OBlockCache::default();
-            let mut o_block_sieve = LayeredSieve::new(self.graph.order() as u32, self.target_width as u32);
+            let mut o_block_sieve =
+                LayeredSieve::new(self.graph.order() as u32, self.target_width as u32);
             self.ready_queue = VecDeque::with_capacity(self.cache.i_block_cache.len());
 
             self.ready_queue = self.cache.i_block_cache.values().cloned().collect();
@@ -187,7 +191,10 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                     #[cfg(feature = "handle-ctrlc")]
                     if crate::signals::received_ctrl_c() {
                         // unknown lowerbound
-                        return Err(());
+                        return ComputationResult::Bounds(Bounds {
+                            lowerbound: self.target_width,
+                            upperbound: self.upper_bound,
+                        });
                     }
                     let ready = self.ready_queue.pop_front().unwrap();
                     ready.process(
@@ -201,7 +208,9 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                     );
 
                     if self.solution.is_some() {
-                        return Ok(self.create_tree_decomposition());
+                        return ComputationResult::ComputedTreeDecomposition(
+                            self.create_tree_decomposition(),
+                        );
                     }
                 }
 
@@ -210,7 +219,10 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                     #[cfg(feature = "handle-ctrlc")]
                     if crate::signals::received_ctrl_c() {
                         // unknown lowerbound
-                        return Err(());
+                        return ComputationResult::Bounds(Bounds {
+                            lowerbound: self.target_width,
+                            upperbound: self.upper_bound,
+                        });
                     }
                     if endorser.ready(&self.cache.i_block_cache) {
                         endorser.endorse(
@@ -223,7 +235,9 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
                         self.pending_endorsers.push(endorser);
                     }
                     if self.solution.is_some() {
-                        return Ok(self.create_tree_decomposition());
+                        return ComputationResult::ComputedTreeDecomposition(
+                            self.create_tree_decomposition(),
+                        );
                     }
                 }
                 if self.ready_queue.is_empty() {
@@ -232,11 +246,10 @@ impl AtomSolver for TamakiPid<HashMapGraph> {
             }
             self.target_width += 1;
         }
-        Err(())
-        /*let mut td = TreeDecomposition::new();
-        let bag = (0..self.graph.order()).map(|i| { self.self_to_og[i] as usize }).collect();
-        td.add_bag(bag);
-        return Ok(td);*/
+        return ComputationResult::Bounds(Bounds {
+            lowerbound: self.target_width,
+            upperbound: self.upper_bound,
+        });
     }
 }
 
@@ -458,11 +471,7 @@ impl PMC {
                 target.or(&b.component);
             }
             if cache.i_block_cache.get(&target).is_none() {
-                let block = get_or_create_block(
-                    &target,
-                    graph,
-                    &mut cache.block_cache,
-                );
+                let block = get_or_create_block(&target, graph, &mut cache.block_cache);
                 let i_block = IBlock::new(block.clone(), self.clone());
                 cache.i_block_cache.insert(target, i_block.clone());
                 ready_queue.push_back(i_block);
@@ -634,11 +643,7 @@ impl OBlock {
             new_separator.or(&nb);
 
             if new_separator.cardinality() <= target_width + 1 {
-                let blocks = separate_into_blocks(
-                    &new_separator,
-                    graph,
-                    &mut cache.block_cache,
-                );
+                let blocks = separate_into_blocks(&new_separator, graph, &mut cache.block_cache);
                 let pmc = PMC::new(new_separator, &blocks, graph);
 
                 if pmc.valid {
@@ -668,11 +673,7 @@ impl OBlock {
             return None;
         }
 
-        let blocks = separate_into_blocks(
-            &new_separator,
-            graph,
-            &mut cache.block_cache,
-        );
+        let blocks = separate_into_blocks(&new_separator, graph, &mut cache.block_cache);
 
         let mut full_block: Option<&Block> = None;
         for block in &blocks {
@@ -756,7 +757,7 @@ fn separate_into_blocks(
         rest.and_not(&c);
         v_option = rest.get_next_set(v + 1);
     }
-    return blocks;
+    blocks
 }
 
 fn get_or_create_block<'a>(
@@ -766,10 +767,7 @@ fn get_or_create_block<'a>(
 ) -> &'a Block {
     let is_none = block_cache.get(&component).is_none();
     if is_none {
-        block_cache.insert(
-            component.clone(),
-            Block::new(component.clone(), graph),
-        );
+        block_cache.insert(component.clone(), Block::new(component.clone(), graph));
     }
     block_cache.get(&component).unwrap()
 }
@@ -907,34 +905,31 @@ impl BlockSieve {
         let sz = node.size();
 
         let mut values = vec![0u64; sz];
-        let mut m = node.get_mask();
-        let ntz = m.trailing_zeros();
-        let mut t = ntz + node.node().width;
+        let mut mask = node.get_mask();
+        let n_trailing_zeros = mask.trailing_zeros();
+        let mut t = n_trailing_zeros + node.node().width;
 
         while values.len() > Self::MAX_CHILDREN_SIZE {
-            t = (ntz + t) / 2;
-            m = consecutive_one_bit(ntz, t);
-            let mut p = 0;
-            for i in 0..sz {
-                let label = (node.get_label_at(i) & m) >> ntz;
-                match values[0..p].binary_search(&label) {
-                    Err(j) => {
-                        let mut k = p as i64;
-                        while k - 1 >= j as i64 {
-                            values[k as usize] = values[(k - 1) as usize];
-                            k -= 1;
-                        }
-                        values[j as usize] = label;
-                        p += 1;
+            t = (n_trailing_zeros + t) / 2;
+            mask = consecutive_one_bit(n_trailing_zeros, t);
+            let mut limit = 0;
+            for idx in 0..sz {
+                let label = (node.get_label_at(idx) & mask) >> n_trailing_zeros;
+                if let Err(j) = values[0..limit].binary_search(&label) {
+                    let mut k = limit as i64;
+                    while k > j as i64 {
+                        values[k as usize] = values[(k - 1) as usize];
+                        k -= 1;
                     }
-                    _ => {}
+                    values[j as usize] = label;
+                    limit += 1;
                 }
             }
-            values.resize(p, 0);
+            values.resize(limit, 0);
         }
 
         let mut new_children = Vec::with_capacity(values.len());
-        let mask = node.get_mask() & !m;
+        let mask = node.get_mask() & !mask;
         for _ in 0..values.len() {
             new_children.push(new_node(
                 node.node().index,
@@ -945,10 +940,12 @@ impl BlockSieve {
 
         for i in 0..values.len() {
             let label = node.get_label_at(i);
-            let j = values[..].binary_search(&((label & m) >> ntz)).unwrap();
+            let j = values[..]
+                .binary_search(&((label & mask) >> n_trailing_zeros))
+                .unwrap();
             if node.is_leaf(last) {
                 let tmp = node.node_mut().values.get_mut(i).unwrap();
-                let value = std::mem::replace(tmp, Default::default());
+                let value = std::mem::take(tmp);
                 new_children[j].add_value(label, value);
             } else {
                 let tmp = node.node_mut().children.get_mut(i).unwrap();
@@ -957,9 +954,9 @@ impl BlockSieve {
             }
         }
 
-        *node = new_node(node.node().index, m.count_ones(), m.trailing_zeros());
+        *node = new_node(node.node().index, mask.count_ones(), mask.trailing_zeros());
         for (i, c) in new_children.drain(..).enumerate() {
-            node.add_child(values[i] << ntz, c);
+            node.add_child(values[i] << n_trailing_zeros, c);
         }
     }
 

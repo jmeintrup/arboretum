@@ -1,9 +1,9 @@
 use crate::datastructures::BinaryQueue;
-use crate::graph::Graph;
+use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::solver::AtomSolver;
-use crate::tree_decomposition::{TreeDecomposition};
+use crate::solver::{AtomSolver, Bounds, ComputationResult};
+use crate::tree_decomposition::TreeDecomposition;
 use fnv::{FnvHashMap, FnvHashSet};
 #[cfg(feature = "log")]
 use log::info;
@@ -27,7 +27,7 @@ impl Selector for MinFillDegreeSelector {
     }
 
     fn value(&self, v: usize) -> i64 {
-        self.inner.value(v) << 32 + (self.inner.graph.degree(v) as i64)
+        (self.inner.value(v) << 32) + (self.inner.graph.degree(v) as i64)
     }
 
     fn eliminate_vertex(&mut self, v: usize) {
@@ -207,13 +207,13 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
         }
     }
 
-    fn compute(self) -> Result<TreeDecomposition, ()> {
+    fn compute(self) -> ComputationResult {
         #[cfg(feature = "log")]
         info!(" computing heuristic elimination td");
         let mut tree_decomposition = TreeDecomposition::default();
         if self.selector.graph().order() <= self.lowerbound + 1 {
             tree_decomposition.add_bag(self.selector.graph().vertices().collect());
-            return Ok(tree_decomposition);
+            return ComputationResult::ComputedTreeDecomposition(tree_decomposition);
         }
 
         let mut max_bag = 2;
@@ -243,7 +243,10 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             }
 
             if selector.graph().degree(u) > upperbound {
-                return Err(());
+                return ComputationResult::Bounds(Bounds {
+                    lowerbound,
+                    upperbound,
+                });
             }
 
             let nb: FnvHashSet<usize> = selector.graph().neighborhood(u).collect();
@@ -255,10 +258,10 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             selector.eliminate_vertex(u);
 
             /*let tmp: Vec<_> = nb
-                .iter()
-                .copied()
-                .filter(|u| selector.graph().neighborhood_set(*u).len() < nb.len())
-                .collect();*/
+            .iter()
+            .copied()
+            .filter(|u| selector.graph().neighborhood_set(*u).len() < nb.len())
+            .collect();*/
 
             // eliminate directly, as these are subsets of the current bag
             /*for u in tmp {
@@ -284,7 +287,9 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
 
             let mut neighbor: Option<usize> = None;
             for u in tree_decomposition.bags[*bag_id].vertex_set.iter() {
-                let candidate_neighbor = &tree_decomposition.bags[*eliminated_in_bag.get(u).unwrap_or(&(tree_decomposition.bags.len() - 1))];
+                let candidate_neighbor = &tree_decomposition.bags[*eliminated_in_bag
+                    .get(u)
+                    .unwrap_or(&(tree_decomposition.bags.len() - 1))];
                 if candidate_neighbor.id == *bag_id {
                     continue;
                 }
@@ -323,7 +328,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
                 }
             }
         }*/
-        Ok(tree_decomposition)
+        ComputationResult::ComputedTreeDecomposition(tree_decomposition)
     }
 }
 /*
@@ -416,7 +421,7 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::Graph;
+    use crate::graph::BaseGraph;
     use crate::graph::HashMapGraph;
     use crate::graph::MutableGraph;
     use crate::heuristic_elimination_order::{DistanceTwoNeighbors, MinFillSelector, Selector};
@@ -424,7 +429,6 @@ mod tests {
     use fnv::FnvHashMap;
     use std::convert::TryFrom;
     use std::fs::File;
-    use std::io::prelude::*;
     use std::io::BufReader;
     use std::path::PathBuf;
 
