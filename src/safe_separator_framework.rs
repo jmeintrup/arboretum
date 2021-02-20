@@ -3,7 +3,7 @@ use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use crate::solver::{AlgorithmTypes, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
-use fxhash::{FxHashMap, FxHashSet};
+use fnv::{FnvHashMap, FnvHashSet};
 use std::borrow::Borrow;
 use std::cell::Cell;
 use std::cmp::max;
@@ -66,7 +66,7 @@ impl<'a> SearchState<'a> {
         }
     }
 
-    fn graph_from_cc(&self, cc: &FxHashSet<usize>, separator: &FxHashSet<usize>) -> HashMapGraph {
+    fn graph_from_cc(&self, cc: &FnvHashSet<usize>, separator: &FnvHashSet<usize>) -> HashMapGraph {
         let mut graph = self.graph.vertex_induced(cc);
         for v in separator.iter() {
             for u in separator.iter().filter(|u| v < *u) {
@@ -84,7 +84,7 @@ impl<'a> SearchState<'a> {
         graph
     }
 
-    pub fn process_separator(&mut self, separator: &FxHashSet<usize>) -> TreeDecomposition {
+    pub fn process_separator(&mut self, separator: &FnvHashSet<usize>) -> TreeDecomposition {
         let mut td = TreeDecomposition::default();
         let root = td.add_bag(separator.clone());
         if td.max_bag_size > 0 {
@@ -184,7 +184,7 @@ impl<'a> SearchState<'a> {
                 for cc in self.graph.separate(&separator) {
                     let graph = self.graph_from_cc(&cc, &separator);
 
-                    let full_vertex_set: FxHashSet<_> = graph.vertices().collect();
+                    let full_vertex_set: FnvHashSet<_> = graph.vertices().collect();
 
                     let mut partial_heuristic_bags: Vec<_> = heuristic_td
                         .bags
@@ -192,7 +192,7 @@ impl<'a> SearchState<'a> {
                         .filter(|b| full_vertex_set.is_superset(&b.vertex_set))
                         .cloned()
                         .collect();
-                    let old_to_new: FxHashMap<usize, usize> = partial_heuristic_bags
+                    let old_to_new: FnvHashMap<usize, usize> = partial_heuristic_bags
                         .iter()
                         .enumerate()
                         .map(|(id, b)| (b.id, id))
@@ -441,7 +441,7 @@ impl<'a> SearchState<'a> {
 }
 
 enum SeparatorSearchResult {
-    Some(FxHashSet<usize>),
+    Some(FnvHashSet<usize>),
     None,
     Delayed,
 }

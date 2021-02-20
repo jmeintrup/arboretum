@@ -2,7 +2,7 @@ use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use crate::tree_decomposition::TreeDecomposition;
-use fxhash::FxHashSet;
+use fnv::FnvHashSet;
 use std::borrow::BorrowMut;
 use std::cmp::max;
 use std::collections::VecDeque;
@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 use crate::signals::received_ctrl_c;
 
 #[inline]
-fn eliminate(v: usize, graph: &mut HashMapGraph, stack: &mut Vec<FxHashSet<usize>>) {
+fn eliminate(v: usize, graph: &mut HashMapGraph, stack: &mut Vec<FnvHashSet<usize>>) {
     let mut bag = graph.neighborhood_set(v).clone();
     bag.insert(v);
     stack.push(bag);
@@ -27,7 +27,7 @@ struct Cube {
 }
 
 pub struct RuleBasedPreprocessor {
-    stack: Vec<FxHashSet<usize>>,
+    stack: Vec<FnvHashSet<usize>>,
     pub lower_bound: usize,
     partial_tree_decomposition: TreeDecomposition,
     processed_graph: HashMapGraph,
@@ -59,7 +59,7 @@ impl RuleBasedPreprocessor {
     }
 
     pub fn combine_into_td(mut self, td: TreeDecomposition) -> TreeDecomposition {
-        let mut vertices = FxHashSet::default();
+        let mut vertices = FnvHashSet::default();
         for bag in &td.bags {
             vertices.extend(bag.vertex_set.iter().copied())
         }
@@ -95,7 +95,7 @@ impl RuleBasedPreprocessor {
             .vertices()
             .find(|v| self.processed_graph.degree(*v) == 0);
         if let Some(v) = found {
-            let mut bag = FxHashSet::with_capacity_and_hasher(1, Default::default());
+            let mut bag = FnvHashSet::with_capacity_and_hasher(1, Default::default());
             bag.insert(v);
             self.stack.push(bag);
             self.processed_graph.remove_vertex(v);
@@ -267,7 +267,7 @@ impl RuleBasedPreprocessor {
         }
 
         if let Some(cube) = cube {
-            let mut bag = FxHashSet::with_capacity_and_hasher(4, Default::default());
+            let mut bag = FnvHashSet::with_capacity_and_hasher(4, Default::default());
             bag.insert(cube.second_neighbor_of_x);
             bag.insert(cube.to_eliminate);
             bag.insert(cube.v);
@@ -356,7 +356,7 @@ impl RuleBasedPreprocessor {
                 self.lower_bound = 0;
                 return;
             }
-            let mut visited: FxHashSet<usize> = FxHashSet::with_capacity_and_hasher(
+            let mut visited: FnvHashSet<usize> = FnvHashSet::with_capacity_and_hasher(
                 self.processed_graph.order(),
                 Default::default(),
             );
@@ -376,7 +376,7 @@ impl RuleBasedPreprocessor {
                     self.lower_bound = 0;
                     return;
                 }
-                let mut nb: FxHashSet<_> = self.processed_graph.neighborhood(v).collect();
+                let mut nb: FnvHashSet<_> = self.processed_graph.neighborhood(v).collect();
                 if nb.len() > d {
                     continue;
                 }
