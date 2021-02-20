@@ -1,6 +1,6 @@
 use crate::datastructures::BitSet;
 use crate::graph::BaseGraph;
-use fnv::{FnvHashMap, FnvHashSet};
+use fxhash::{FxHashMap, FxHashSet};
 use std::cmp::max;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -56,7 +56,7 @@ impl TreeDecomposition {
         }
     }
 
-    pub fn with_root(vertex_set: FnvHashSet<usize>) -> Self {
+    pub fn with_root(vertex_set: FxHashSet<usize>) -> Self {
         let mut td = Self::default();
         td.add_bag(vertex_set);
         td
@@ -116,7 +116,7 @@ impl TreeDecomposition {
         None
     }
 
-    pub fn add_bag(&mut self, vertex_set: FnvHashSet<usize>) -> usize {
+    pub fn add_bag(&mut self, vertex_set: FxHashSet<usize>) -> usize {
         let id = self.bags.len();
         if id == 0 {
             self.root = Some(id);
@@ -125,7 +125,7 @@ impl TreeDecomposition {
         self.bags.push(Bag {
             id,
             vertex_set,
-            neighbors: FnvHashSet::default(),
+            neighbors: FxHashSet::default(),
         });
         id
     }
@@ -133,7 +133,7 @@ impl TreeDecomposition {
     pub fn add_child_bags(
         &mut self,
         parent: usize,
-        children: Vec<FnvHashSet<usize>>,
+        children: Vec<FxHashSet<usize>>,
     ) -> Vec<usize> {
         assert!(self.bags.len() < parent);
         let mut ids = Vec::with_capacity(children.len());
@@ -169,10 +169,10 @@ impl TreeDecomposition {
     }
 
     pub fn replace_bag_v2(&mut self, target_bag: usize, mut td: TreeDecomposition) {
-        let mut separators: FnvHashMap<usize, FnvHashSet<usize>> = FnvHashMap::default();
+        let mut separators: FxHashMap<usize, FxHashSet<usize>> = FxHashMap::default();
         for neighbor in &self.bags[target_bag].neighbors {
             let key = self.bags[*neighbor].id;
-            let value: FnvHashSet<_> = self.bags[target_bag]
+            let value: FxHashSet<_> = self.bags[target_bag]
                 .vertex_set
                 .intersection(&self.bags[*neighbor].vertex_set)
                 .copied()
@@ -214,7 +214,7 @@ impl TreeDecomposition {
         });
         for neighbor_of_target_bag in neighbors_of_target_bag {
             let neighbor_of_target_bag = &mut self.bags[neighbor_of_target_bag];
-            let intersection: FnvHashSet<_> = vertices_of_target_bag
+            let intersection: FxHashSet<_> = vertices_of_target_bag
                 .intersection(&neighbor_of_target_bag.vertex_set)
                 .copied()
                 .collect();
@@ -335,7 +335,7 @@ impl TreeDecomposition {
     }
 
     fn get_missing_vertex<G: BaseGraph>(&self, graph: &G) -> Option<usize> {
-        let mut vertices: FnvHashSet<usize> = graph.vertices().collect();
+        let mut vertices: FxHashSet<usize> = graph.vertices().collect();
         self.bags.iter().for_each(|b| {
             b.vertex_set.iter().for_each(|x| {
                 vertices.remove(x);
@@ -368,7 +368,7 @@ impl TreeDecomposition {
 
     fn get_vertex_not_inducing_subtree<G: BaseGraph>(&self, graph: &G) -> Option<usize> {
         for u in graph.vertices() {
-            let mut inducing_bags: FnvHashSet<usize> = self
+            let mut inducing_bags: FxHashSet<usize> = self
                 .bags
                 .iter()
                 .filter(|b| b.vertex_set.contains(&u))
@@ -422,6 +422,6 @@ impl<'a> Iterator for TreeDecompositionIterator<'a> {
 #[derive(Debug, Default, Clone)]
 pub struct Bag {
     pub id: usize,
-    pub vertex_set: FnvHashSet<usize>,
-    pub neighbors: FnvHashSet<usize>,
+    pub vertex_set: FxHashSet<usize>,
+    pub neighbors: FxHashSet<usize>,
 }

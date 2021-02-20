@@ -4,16 +4,16 @@ use crate::graph::BitGraph;
 use crate::graph::HashMapGraph;
 use crate::solver::{AtomSolver, Bounds, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
-use fnv::{FnvHashMap, FnvHashSet};
+use fxhash::{FxHashMap, FxHashSet};
 use std::borrow::{Borrow, BorrowMut};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
-type BlockCache = FnvHashMap<BitSet, Block>;
-type OBlockCache = FnvHashMap<BitSet, OBlock>;
-type IBlockCache = FnvHashMap<BitSet, IBlock>;
+type BlockCache = FxHashMap<BitSet, Block>;
+type OBlockCache = FxHashMap<BitSet, OBlock>;
+type IBlockCache = FxHashMap<BitSet, IBlock>;
 
 #[derive(Debug)]
 struct Cache {
@@ -95,7 +95,7 @@ impl TamakiPid {
         td
     }
 
-    fn translate_vertex_set(&self, vertex_set: &BitSet) -> FnvHashSet<usize> {
+    fn translate_vertex_set(&self, vertex_set: &BitSet) -> FxHashSet<usize> {
         vertex_set
             .iter()
             .map(|v| self.self_to_og[v] as usize)
@@ -120,7 +120,7 @@ impl TamakiPid {
     fn trivial_td(&self) -> TreeDecomposition {
         let mut td = TreeDecomposition::default();
         if self.graph.order() > 0 {
-            let vertex_set: FnvHashSet<usize> = (0..self.graph.order())
+            let vertex_set: FxHashSet<usize> = (0..self.graph.order())
                 .map(|i| self.self_to_og[i as usize] as usize)
                 .collect();
             td.add_bag(vertex_set);
@@ -284,7 +284,7 @@ impl AtomSolver for TamakiPid {
     }
 
     fn with_bounds(og_graph: &HashMapGraph, lowerbound: usize, upperbound: usize) -> Self {
-        let mut og_to_self = FnvHashMap::default();
+        let mut og_to_self = FxHashMap::default();
         let mut self_to_og = Vec::with_capacity(og_graph.order());
 
         for (idx, v) in og_graph.vertices().enumerate() {

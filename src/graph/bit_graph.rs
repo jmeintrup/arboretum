@@ -1,6 +1,6 @@
 use crate::datastructures::BitSet;
 use crate::graph::base_graph::BaseGraph;
-use fnv::FnvHashMap;
+use fxhash::FxHashMap;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 
@@ -24,7 +24,7 @@ impl From<&[BitSet]> for BitGraph {
 }
 
 impl BitGraph {
-    pub fn from_graph<G: BaseGraph>(og_graph: &G, og_to_self: &FnvHashMap<u32, u32>) -> Self {
+    pub fn from_graph<G: BaseGraph>(og_graph: &G, og_to_self: &FxHashMap<u32, u32>) -> Self {
         let mut graph = vec![BitSet::new(og_graph.order()); og_graph.order()];
 
         for v in og_graph.vertices() {
