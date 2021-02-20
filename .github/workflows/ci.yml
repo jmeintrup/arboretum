@@ -22,9 +22,9 @@ jobs:
     name: Test Suite
     runs-on: ubuntu-latest
     steps:
-      - name: include td-validate submodule to base repo
-        run: git submodule update --init
       - uses: actions/checkout@v2
+        with:
+          submodules: 'true'
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
