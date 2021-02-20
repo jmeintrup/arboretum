@@ -842,7 +842,7 @@ impl BlockSieve {
         let mut node = &mut self.root;
 
         let mut i = 0;
-        let mut bits: u64 = 0;
+        let mut bits: u64;
         loop {
             bits = 0;
             if i < slice.len() {

@@ -2,8 +2,6 @@ use crate::datastructures::BinaryQueue;
 use crate::graph::Graph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-#[cfg(feature = "handle-ctrlc")]
-use crate::signals::received_ctrl_c;
 use crate::solver::AtomSolver;
 use crate::tree_decomposition::{TreeDecomposition};
 use fnv::{FnvHashMap, FnvHashSet};

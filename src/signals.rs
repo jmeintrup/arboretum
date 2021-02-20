@@ -1,6 +1,5 @@
 use core::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 static SIGINT: AtomicBool = AtomicBool::new(false);
 
