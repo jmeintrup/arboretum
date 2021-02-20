@@ -203,7 +203,7 @@ pub struct Solver {
     algorithm_types: AlgorithmTypes,
     safe_separator_limits: SafeSeparatorLimits,
     apply_reduction_rules: bool,
-    use_atom_width_for_lowerbound: bool,
+    use_atom_width_as_lower_bound: bool,
 }
 
 impl Default for Solver {
@@ -212,7 +212,7 @@ impl Default for Solver {
             algorithm_types: AlgorithmTypes::default(),
             safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
-            use_atom_width_for_lowerbound: true,
+            use_atom_width_as_lower_bound: true,
         }
     }
 }
@@ -223,7 +223,7 @@ impl Solver {
             algorithm_types: AlgorithmTypes::default().atom_solver(AtomSolverType::None),
             safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
-            use_atom_width_for_lowerbound: true,
+            use_atom_width_as_lower_bound: true,
         }
     }
 
@@ -288,7 +288,7 @@ impl Solver {
     impl_setter!(self, algorithm_types, AlgorithmTypes);
     impl_setter!(self, safe_separator_limits, SafeSeparatorLimits);
     impl_setter!(self, apply_reduction_rules, bool);
-    impl_setter!(self, use_atom_width_for_lowerbound, bool);
+    impl_setter!(self, use_atom_width_as_lower_bound, bool);
 
     pub fn solve(&self, graph: &HashMapGraph) -> TreeDecomposition {
         #[cfg(feature = "log")]
@@ -352,11 +352,12 @@ impl Solver {
                 let result = SafeSeparatorFramework::default()
                     .algorithms(self.algorithm_types)
                     .safe_separator_limits(self.safe_separator_limits)
+                    .use_atom_width_as_lower_bound(self.use_atom_width_as_lower_bound)
                     .compute(reduced_graph, lowerbound);
                 lowerbound = max(lowerbound, result.lowerbound);
                 let mut partial_td = result.tree_decomposition;
                 partial_td.flatten();
-                if self.use_atom_width_for_lowerbound {
+                if self.use_atom_width_as_lower_bound {
                     lowerbound = max(lowerbound, partial_td.max_bag_size - 1);
                 }
                 match partial_td.verify(reduced_graph) {
