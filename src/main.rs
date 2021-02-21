@@ -41,9 +41,9 @@ struct Opt {
     #[structopt(short, long)]
     mode: Option<String>,
 
-    /// Seed used for all rng. Unsigned 64bit integer value.
-    #[structopt(short, long, default = "0")]
-    seed: u64,
+    /// Seed used for all rng. Unsigned 64bit integer value. Defaults to '0' if missing.
+    #[structopt(short, long)]
+    seed: Option<u64>,
 }
 
 fn main() -> io::Result<()> {
@@ -88,23 +88,27 @@ fn main() -> io::Result<()> {
             #[cfg(log)]
             info!("Running in default heuristic mode.");
             Solver::default_heuristic()
-                .use_min_degree_for_minor_safe(true)
-                .seed(Some(opt.seed))
+                .safe_separator_limits(
+                    SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
+                )
+                .seed(opt.seed)
                 .solve(&graph)
         }
         "auto" => {
             #[cfg(log)]
             info!("Running in default auto mode.");
             Solver::auto(&graph)
-                .use_min_degree_for_minor_safe(true)
-                .seed(Some(opt.seed))
+                .safe_separator_limits(
+                    SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
+                )
+                .seed(opt.seed)
                 .solve(&graph)
         }
         _ => {
             #[cfg(log)]
             info!("Running in default exact mode.");
             Solver::default_exact()
-                .seed(Some(opt.seed))
+                .seed(opt.seed)
                 .safe_separator_limits(
                     SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
                 )

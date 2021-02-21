@@ -1,4 +1,4 @@
-use crate::graph::BaseGraph;
+use crate::graph::{BaseGraph, MinorSafeResult};
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use crate::solver::{AlgorithmTypes, ComputationResult};
@@ -120,7 +120,7 @@ impl<'a> SearchState<'a> {
                 // unknown lowerbound
                 return TreeDecomposition::with_root(self.graph.vertices().collect());
             }
-            match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
+            match Self::find_separator(&self.graph, &self.limits, &self.separation_level, self.seed) {
                 SeparatorSearchResult::Some(separator) => {
                     #[cfg(log)]
                     info!("found safe separator: {:?}", self.separation_level);
@@ -243,7 +243,7 @@ impl<'a> SearchState<'a> {
                         Some(upperbound_td) => upperbound_td,
                     };
                 }
-                match Self::find_separator(&self.graph, &self.limits, &self.separation_level) {
+                match Self::find_separator(&self.graph, &self.limits, &self.separation_level, self.seed) {
                     SeparatorSearchResult::Some(separator) => {
                         #[cfg(feature = "log")]
                         info!("found safe separator: {:?}", self.separation_level);
@@ -384,6 +384,7 @@ impl<'a> SearchState<'a> {
         graph: &HashMapGraph,
         limits: &SafeSeparatorLimits,
         separation_level: &SeparationLevel,
+        seed: Option<u64>
     ) -> SeparatorSearchResult {
         match separation_level {
             SeparationLevel::Connected => {
@@ -431,6 +432,18 @@ impl<'a> SearchState<'a> {
                     match graph.find_almost_clique_minimal_separator() {
                         None => SeparatorSearchResult::None,
                         Some(s) => SeparatorSearchResult::Some(s),
+                    }
+                } else {
+                    SeparatorSearchResult::Delayed
+                }
+            }
+            SeparationLevel::MinorSafeClique => {
+                if graph.order() <= limits.minor_safe_separator {
+                    match graph.find_minor_safe_separator(None, seed, limits.minor_safe_separator_tries, limits.minor_safe_separator_max_missing, false) {
+                        None => SeparatorSearchResult::None,
+                        Some(result) => {
+                            SeparatorSearchResult::Some(result.separator)
+                        }
                     }
                 } else {
                     SeparatorSearchResult::Delayed
