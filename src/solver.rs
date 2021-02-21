@@ -204,6 +204,7 @@ pub struct Solver {
     safe_separator_limits: SafeSeparatorLimits,
     apply_reduction_rules: bool,
     use_atom_width_as_lower_bound: bool,
+    seed: Option<u64>,
 }
 
 impl Default for Solver {
@@ -213,6 +214,7 @@ impl Default for Solver {
             safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
             use_atom_width_as_lower_bound: true,
+            seed: None,
         }
     }
 }
@@ -224,6 +226,7 @@ impl Solver {
             safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
             use_atom_width_as_lower_bound: true,
+            seed: None,
         }
     }
 
@@ -289,6 +292,7 @@ impl Solver {
     impl_setter!(self, safe_separator_limits, SafeSeparatorLimits);
     impl_setter!(self, apply_reduction_rules, bool);
     impl_setter!(self, use_atom_width_as_lower_bound, bool);
+    impl_setter!(self, seed, Option<u64>);
 
     pub fn solve(&self, graph: &HashMapGraph) -> TreeDecomposition {
         #[cfg(feature = "log")]
@@ -351,6 +355,7 @@ impl Solver {
 
                 let result = SafeSeparatorFramework::default()
                     .algorithms(self.algorithm_types)
+                    .seed(self.seed)
                     .safe_separator_limits(self.safe_separator_limits)
                     .use_atom_width_as_lower_bound(self.use_atom_width_as_lower_bound)
                     .compute(reduced_graph, lowerbound);

@@ -490,7 +490,7 @@ impl SafeSeparatorLimits {
             minor_safe_separator_max_missing: 0,
             minor_safe_separator_tries: 0,
             check_again_before_atom: false,
-            use_min_degree_for_minor_safe: false
+            use_min_degree_for_minor_safe: false,
         }
     }
 
@@ -505,7 +505,7 @@ impl SafeSeparatorLimits {
             minor_safe_separator_max_missing: 0,
             minor_safe_separator_tries: 0,
             check_again_before_atom: false,
-            use_min_degree_for_minor_safe: false
+            use_min_degree_for_minor_safe: false,
         }
     }
 
@@ -542,6 +542,7 @@ pub struct SafeSeparatorFramework {
     safe_separator_limits: SafeSeparatorLimits,
     algorithms: AlgorithmTypes,
     use_atom_width_as_lower_bound: bool,
+    seed: Option<u64>,
 }
 
 impl Default for SafeSeparatorFramework {
@@ -550,6 +551,7 @@ impl Default for SafeSeparatorFramework {
             safe_separator_limits: SafeSeparatorLimits::default(),
             algorithms: AlgorithmTypes::default(),
             use_atom_width_as_lower_bound: true,
+            seed: None,
         }
     }
 }
@@ -558,6 +560,7 @@ impl SafeSeparatorFramework {
     impl_setter!(self, safe_separator_limits, SafeSeparatorLimits);
     impl_setter!(self, algorithms, AlgorithmTypes);
     impl_setter!(self, use_atom_width_as_lower_bound, bool);
+    impl_setter!(self, seed, Option<u64>);
 
     pub fn compute(self, graph: &HashMapGraph, lowerbound: usize) -> DecompositionResult {
         let lowerbound = Rc::new(Cell::new(lowerbound));

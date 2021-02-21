@@ -11,6 +11,7 @@ use structopt::StructOpt;
 #[cfg(log)]
 use log::info;
 
+use arboretum::SafeSeparatorLimits;
 #[cfg(feature = "jemallocator")]
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
@@ -39,6 +40,10 @@ struct Opt {
     /// Any invalid input fails silently to 'exact'.
     #[structopt(short, long)]
     mode: Option<String>,
+
+    /// Seed used for all rng. Unsigned 64bit integer value.
+    #[structopt(short, long, default = "0")]
+    seed: u64,
 }
 
 fn main() -> io::Result<()> {
@@ -82,17 +87,28 @@ fn main() -> io::Result<()> {
         "heuristic" => {
             #[cfg(log)]
             info!("Running in default heuristic mode.");
-            Solver::default_heuristic().solve(&graph)
+            Solver::default_heuristic()
+                .use_min_degree_for_minor_safe(true)
+                .seed(Some(opt.seed))
+                .solve(&graph)
         }
         "auto" => {
             #[cfg(log)]
             info!("Running in default auto mode.");
-            Solver::auto(&graph).solve(&graph)
+            Solver::auto(&graph)
+                .use_min_degree_for_minor_safe(true)
+                .seed(Some(opt.seed))
+                .solve(&graph)
         }
         _ => {
             #[cfg(log)]
             info!("Running in default exact mode.");
-            Solver::default_exact().solve(&graph)
+            Solver::default_exact()
+                .seed(Some(opt.seed))
+                .safe_separator_limits(
+                    SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
+                )
+                .solve(&graph)
         }
     };
 
