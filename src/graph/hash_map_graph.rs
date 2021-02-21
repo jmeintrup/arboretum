@@ -187,7 +187,7 @@ impl HashMapGraph {
         if let Some(result) = self.minor_safe_helper(new_td, max_tries, max_missing, seed) {
             Some(result)
         } else {
-            return if use_min_degree {
+            if use_min_degree {
                 let mut new_td =
                     HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
                         .compute()
@@ -197,7 +197,7 @@ impl HashMapGraph {
                 self.minor_safe_helper(new_td, max_tries, max_missing, seed)
             } else {
                 None
-            };
+            }
         }
     }
 
