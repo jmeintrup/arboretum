@@ -1,6 +1,6 @@
+use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
-use crate::graph::{BaseGraph};
 use crate::solver::{AlgorithmTypes, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
 use fxhash::{FxHashMap, FxHashSet};
@@ -152,7 +152,6 @@ impl<'a> SearchState<'a> {
         if self.separation_level == SeparationLevel::MinorSafeClique
             && self.graph.order() < self.limits.minor_safe_separator
         {
-
             #[cfg(feature = "handle-ctrlc")]
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
@@ -316,7 +315,6 @@ impl<'a> SearchState<'a> {
         {
             let lb: &Cell<_> = self.lower_bound.borrow();
             if atom_lowerbound > lb.get() {
-
                 #[cfg(feature = "log")]
                 info!(
                     "Found new Lowerbound. Previous {} Now {}",
@@ -334,7 +332,6 @@ impl<'a> SearchState<'a> {
                 upperbound,
                 lb.get()
             );
-
         }
         let lowerbound = {
             let tmp: &Cell<_> = self.lower_bound.borrow();
@@ -467,7 +464,13 @@ impl<'a> SearchState<'a> {
             }
             SeparationLevel::MinorSafeClique => {
                 if graph.order() <= limits.minor_safe_separator {
-                    match graph.find_minor_safe_separator(None, seed, limits.minor_safe_separator_tries, limits.minor_safe_separator_max_missing, false) {
+                    match graph.find_minor_safe_separator(
+                        None,
+                        seed,
+                        limits.minor_safe_separator_tries,
+                        limits.minor_safe_separator_max_missing,
+                        false,
+                    ) {
                         None => SeparatorSearchResult::None,
                         Some(result) => SeparatorSearchResult::Some(result.separator),
                     }
