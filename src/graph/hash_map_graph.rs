@@ -177,6 +177,7 @@ impl HashMapGraph {
         max_tries: usize,
         max_missing: usize,
         seed: Option<u64>,
+        use_min_degree: bool,
     ) -> Option<MinorSafeResult> {
         let mut new_td = HeuristicEliminationDecomposer::<MinFillSelector>::with_graph(&self)
             .compute()
@@ -186,12 +187,17 @@ impl HashMapGraph {
         if let Some(result) = self.minor_safe_helper(new_td, max_tries, max_missing, seed) {
             Some(result)
         } else {
-            let mut new_td = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
-                .compute()
-                .computed_tree_decomposition()
-                .unwrap();
-            new_td.flatten();
-            self.minor_safe_helper(new_td, max_tries, max_missing, seed)
+            return if use_min_degree {
+                let mut new_td =
+                    HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
+                        .compute()
+                        .computed_tree_decomposition()
+                        .unwrap();
+                new_td.flatten();
+                self.minor_safe_helper(new_td, max_tries, max_missing, seed)
+            } else {
+                None
+            };
         }
     }
 
@@ -201,12 +207,15 @@ impl HashMapGraph {
         seed: Option<u64>,
         max_tries: usize,
         max_missing: usize,
+        use_min_degree: bool,
     ) -> Option<MinorSafeResult> {
         match tree_decomposition {
-            None => self.no_match_minor_helper(max_tries, max_missing, seed),
+            None => self.no_match_minor_helper(max_tries, max_missing, seed, use_min_degree),
             Some(working_td) => {
                 match self.minor_safe_helper(working_td, max_tries, max_missing, seed) {
-                    None => self.no_match_minor_helper(max_tries, max_missing, seed),
+                    None => {
+                        self.no_match_minor_helper(max_tries, max_missing, seed, use_min_degree)
+                    }
                     Some(result) => Some(result),
                 }
             }

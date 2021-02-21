@@ -160,6 +160,7 @@ impl<'a> SearchState<'a> {
                 self.seed,
                 self.limits.minor_safe_separator_tries,
                 self.limits.minor_safe_separator_max_missing,
+                self.limits.use_min_degree_for_minor_safe,
             ) {
                 #[cfg(feature = "log")]
                 info!("found safe separator: {:?}", self.separation_level);
@@ -457,6 +458,7 @@ pub struct SafeSeparatorLimits {
     minor_safe_separator_max_missing: usize,
     minor_safe_separator_tries: usize,
     check_again_before_atom: bool,
+    use_min_degree_for_minor_safe: bool,
 }
 
 impl Default for SafeSeparatorLimits {
@@ -471,6 +473,7 @@ impl Default for SafeSeparatorLimits {
             minor_safe_separator_max_missing: 1_000,
             minor_safe_separator_tries: 25,
             check_again_before_atom: false,
+            use_min_degree_for_minor_safe: false,
         }
     }
 }
@@ -487,6 +490,7 @@ impl SafeSeparatorLimits {
             minor_safe_separator_max_missing: 0,
             minor_safe_separator_tries: 0,
             check_again_before_atom: false,
+            use_min_degree_for_minor_safe: false
         }
     }
 
@@ -501,6 +505,7 @@ impl SafeSeparatorLimits {
             minor_safe_separator_max_missing: 0,
             minor_safe_separator_tries: 0,
             check_again_before_atom: false,
+            use_min_degree_for_minor_safe: false
         }
     }
 
@@ -529,6 +534,8 @@ impl SafeSeparatorLimits {
     impl_setter!(self, minor_safe_separator, usize);
     impl_setter!(self, minor_safe_separator_max_missing, usize);
     impl_setter!(self, minor_safe_separator_tries, usize);
+    impl_setter!(self, use_min_degree_for_minor_safe, bool);
+    impl_setter!(self, check_again_before_atom, bool);
 }
 
 pub struct SafeSeparatorFramework {
