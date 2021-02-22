@@ -242,7 +242,7 @@ impl Solver {
                         } else {
                             #[cfg(feature = "log")]
                             info!("Atom too large to be solved exactly");
-                          
+
                             ComputationResult::Bounds(Bounds {
                                 lowerbound,
                                 upperbound,
