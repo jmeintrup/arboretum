@@ -25,6 +25,7 @@ impl From<&[BitSet]> for BitGraph {
 
 impl BitGraph {
     pub fn from_graph<G: BaseGraph>(og_graph: &G, og_to_self: &FxHashMap<u32, u32>) -> Self {
+
         let mut graph = vec![BitSet::new(og_graph.order()); og_graph.order()];
 
         for v in og_graph.vertices() {
