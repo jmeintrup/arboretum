@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 num = "0.3.0"
 rand = "0.7.3"
-fnv = "1.0.7"
+fxhash = "0.2.1"
 bitvec = "0.19.1"
 log = { version = "0.4.14", optional = true }
 structopt = { version = "0.3.21", optional = true }

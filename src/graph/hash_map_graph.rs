@@ -5,8 +5,8 @@ use crate::heuristic_elimination_order::{
     HeuristicEliminationDecomposer, MinDegreeSelector, MinFillSelector,
 };
 use crate::tree_decomposition::TreeDecomposition;
-use fnv::FnvHashMap;
-use fnv::FnvHashSet;
+use fxhash::FxHashMap;
+use fxhash::FxHashSet;
 use rand::prelude::{SliceRandom, StdRng};
 use rand::{Rng, SeedableRng};
 use std::cmp::{max, min, Ordering};
@@ -18,7 +18,7 @@ use crate::solver::AtomSolver;
 
 #[derive(Clone, Debug)]
 pub struct HashMapGraph {
-    data: FnvHashMap<usize, FnvHashSet<usize>>,
+    data: FxHashMap<usize, FxHashSet<usize>>,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -29,7 +29,7 @@ struct MissingEdge {
 
 #[derive(Clone, Debug)]
 pub struct MinorSafeResult {
-    pub separator: FnvHashSet<usize>,
+    pub separator: FxHashSet<usize>,
     pub belongs_to: (usize, usize),
     pub tree_decomposition: TreeDecomposition,
 }
@@ -38,7 +38,7 @@ impl HashMapGraph {
     pub fn has_vertex(&self, u: usize) -> bool {
         self.data.contains_key(&u)
     }
-    pub fn neighborhood_set(&self, u: usize) -> &FnvHashSet<usize> {
+    pub fn neighborhood_set(&self, u: usize) -> &FxHashSet<usize> {
         &self.data.get(&u).unwrap()
     }
     pub fn dfs(&self, u: usize) -> HashMapGraphDfs {
@@ -52,24 +52,24 @@ impl HashMapGraph {
         }
     }
 
-    pub fn find_cut_vertex(&self) -> Option<FnvHashSet<usize>> {
+    pub fn find_cut_vertex(&self) -> Option<FxHashSet<usize>> {
         if self.data.is_empty() {
             return None;
         }
         let u = self.data.keys().copied().next().unwrap();
         let mut c = 0;
-        let mut l: FnvHashMap<usize, usize> = FnvHashMap::default();
-        let mut d: FnvHashMap<usize, usize> = FnvHashMap::default();
-        let ignore: FnvHashSet<usize> = FnvHashSet::default();
+        let mut l: FxHashMap<usize, usize> = FxHashMap::default();
+        let mut d: FxHashMap<usize, usize> = FxHashMap::default();
+        let ignore: FxHashSet<usize> = FxHashSet::default();
         if let Some(v) = self.articulation_point_helper(u, u, &mut c, &mut l, &mut d, &ignore) {
-            let mut set: FnvHashSet<usize> = FnvHashSet::default();
+            let mut set: FxHashSet<usize> = FxHashSet::default();
             set.insert(v);
             return Some(set);
         }
         None
     }
 
-    pub fn find_safe_bi_connected_separator(&self) -> Option<FnvHashSet<usize>> {
+    pub fn find_safe_bi_connected_separator(&self) -> Option<FxHashSet<usize>> {
         if self.data.is_empty() {
             return None;
         }
@@ -79,13 +79,13 @@ impl HashMapGraph {
                 return None;
             }
             let mut c = 0;
-            let mut l: FnvHashMap<usize, usize> = FnvHashMap::default();
-            let mut d: FnvHashMap<usize, usize> = FnvHashMap::default();
-            let mut ignore: FnvHashSet<usize> = FnvHashSet::default();
+            let mut l: FxHashMap<usize, usize> = FxHashMap::default();
+            let mut d: FxHashMap<usize, usize> = FxHashMap::default();
+            let mut ignore: FxHashSet<usize> = FxHashSet::default();
             ignore.insert(guess);
             let u = self.data.keys().copied().find(|x| *x != guess)?;
             if let Some(p) = self.articulation_point_helper(u, u, &mut c, &mut l, &mut d, &ignore) {
-                let mut set: FnvHashSet<usize> = FnvHashSet::default();
+                let mut set: FxHashSet<usize> = FxHashSet::default();
                 set.insert(guess);
                 set.insert(p);
                 return Some(set);
@@ -94,11 +94,11 @@ impl HashMapGraph {
         None
     }
 
-    pub fn connected_components(&self) -> Vec<FnvHashSet<usize>> {
-        self.separate(&FnvHashSet::default())
+    pub fn connected_components(&self) -> Vec<FxHashSet<usize>> {
+        self.separate(&FxHashSet::default())
     }
 
-    pub fn find_safe_tri_connected_separator(&self) -> Option<FnvHashSet<usize>> {
+    pub fn find_safe_tri_connected_separator(&self) -> Option<FxHashSet<usize>> {
         if self.data.is_empty() {
             return None;
         }
@@ -115,9 +115,9 @@ impl HashMapGraph {
                 }
                 let u = self.data.keys().copied().find(|x| *x != f1 && *x != f2)?;
                 let mut c = 0;
-                let mut l: FnvHashMap<usize, usize> = FnvHashMap::default();
-                let mut d: FnvHashMap<usize, usize> = FnvHashMap::default();
-                let mut ignore: FnvHashSet<usize> = FnvHashSet::default();
+                let mut l: FxHashMap<usize, usize> = FxHashMap::default();
+                let mut d: FxHashMap<usize, usize> = FxHashMap::default();
+                let mut ignore: FxHashSet<usize> = FxHashSet::default();
                 ignore.insert(f1);
                 ignore.insert(f2);
                 if let Some(p) =
@@ -128,7 +128,7 @@ impl HashMapGraph {
                         || self.data.get(&p).unwrap().contains(&f2)
                         || self.data.get(&f1).unwrap().contains(&f2)
                     {
-                        let mut set: FnvHashSet<usize> = FnvHashSet::default();
+                        let mut set: FxHashSet<usize> = FxHashSet::default();
                         set.insert(f1);
                         set.insert(f2);
                         set.insert(p);
@@ -143,7 +143,7 @@ impl HashMapGraph {
                         })
                         .is_none();
                     if not_found {
-                        let mut set: FnvHashSet<usize> = FnvHashSet::default();
+                        let mut set: FxHashSet<usize> = FxHashSet::default();
                         set.insert(f1);
                         set.insert(f2);
                         set.insert(p);
@@ -151,7 +151,7 @@ impl HashMapGraph {
                     }
 
                     // separates into > 2 components OR 2 components with each component containing more than 1 vertex
-                    let mut separator = FnvHashSet::default();
+                    let mut separator = FxHashSet::default();
                     separator.insert(f1);
                     separator.insert(f2);
                     separator.insert(p);
@@ -160,7 +160,7 @@ impl HashMapGraph {
                         || components.len() == 2
                             && components.iter().find(|c| c.len() <= 1).is_none()
                     {
-                        let mut set: FnvHashSet<usize> = FnvHashSet::default();
+                        let mut set: FxHashSet<usize> = FxHashSet::default();
                         set.insert(f1);
                         set.insert(f2);
                         set.insert(p);
@@ -177,6 +177,7 @@ impl HashMapGraph {
         max_tries: usize,
         max_missing: usize,
         seed: Option<u64>,
+        use_min_degree: bool,
     ) -> Option<MinorSafeResult> {
         let mut new_td = HeuristicEliminationDecomposer::<MinFillSelector>::with_graph(&self)
             .compute()
@@ -185,13 +186,15 @@ impl HashMapGraph {
         new_td.flatten();
         if let Some(result) = self.minor_safe_helper(new_td, max_tries, max_missing, seed) {
             Some(result)
-        } else {
+        } else if use_min_degree {
             let mut new_td = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
                 .compute()
                 .computed_tree_decomposition()
                 .unwrap();
             new_td.flatten();
             self.minor_safe_helper(new_td, max_tries, max_missing, seed)
+        } else {
+            None
         }
     }
 
@@ -201,12 +204,15 @@ impl HashMapGraph {
         seed: Option<u64>,
         max_tries: usize,
         max_missing: usize,
+        use_min_degree: bool,
     ) -> Option<MinorSafeResult> {
         match tree_decomposition {
-            None => self.no_match_minor_helper(max_tries, max_missing, seed),
+            None => self.no_match_minor_helper(max_tries, max_missing, seed, use_min_degree),
             Some(working_td) => {
                 match self.minor_safe_helper(working_td, max_tries, max_missing, seed) {
-                    None => self.no_match_minor_helper(max_tries, max_missing, seed),
+                    None => {
+                        self.no_match_minor_helper(max_tries, max_missing, seed, use_min_degree)
+                    }
                     Some(result) => Some(result),
                 }
             }
@@ -229,7 +235,7 @@ impl HashMapGraph {
                     return None;
                 }
                 let second_bag = &td.bags[idx].vertex_set;
-                let candidate: FnvHashSet<usize> = first_bag
+                let candidate: FxHashSet<usize> = first_bag
                     .vertex_set
                     .intersection(second_bag)
                     .copied()
@@ -248,7 +254,7 @@ impl HashMapGraph {
 
     fn is_minor_safe(
         &self,
-        separator: &FnvHashSet<usize>,
+        separator: &FxHashSet<usize>,
         max_tries: usize,
         max_missing: usize,
         seed: Option<u64>,
@@ -268,7 +274,7 @@ impl HashMapGraph {
             if received_ctrl_c() {
                 return false;
             }
-            let rest: FnvHashSet<usize> = self
+            let rest: FxHashSet<usize> = self
                 .data
                 .keys()
                 .copied()
@@ -326,7 +332,7 @@ impl HashMapGraph {
                     } else {
                         let mut queue = VecDeque::new();
                         queue.push_back(v);
-                        let mut pre: FnvHashMap<_, _> =
+                        let mut pre: FxHashMap<_, _> =
                             separator.iter().copied().map(|v| (v, v)).collect();
                         pre.remove(&u);
                         while !pre.contains_key(&u) && !queue.is_empty() {
@@ -368,8 +374,8 @@ impl HashMapGraph {
         true
     }
 
-    pub fn vertex_induced(&self, vertices: &FnvHashSet<usize>) -> Self {
-        let data: FnvHashMap<usize, FnvHashSet<usize>> = self
+    pub fn vertex_induced(&self, vertices: &FxHashSet<usize>) -> Self {
+        let data: FxHashMap<usize, FxHashSet<usize>> = self
             .data
             .iter()
             .filter(|(vertex, _)| vertices.contains(vertex))
@@ -387,7 +393,7 @@ impl HashMapGraph {
         Self { data }
     }
 
-    fn is_minimal_separator(&self, separator: &FnvHashSet<usize>) -> bool {
+    fn is_minimal_separator(&self, separator: &FxHashSet<usize>) -> bool {
         let components = self.separate(separator);
         components.len() > 1
             && components
@@ -405,13 +411,13 @@ impl HashMapGraph {
                 .is_none()
     }
 
-    pub fn find_almost_clique_minimal_separator(&self) -> Option<FnvHashSet<usize>> {
+    pub fn find_almost_clique_minimal_separator(&self) -> Option<FxHashSet<usize>> {
         for v in self.data.keys().copied() {
             #[cfg(feature = "handle-ctrlc")]
             if received_ctrl_c() {
                 return None;
             }
-            let mut ignore = FnvHashSet::default();
+            let mut ignore = FxHashSet::default();
             ignore.insert(v);
             if let Some(mut separator) = self.clique_minimal_separator_helper(&ignore) {
                 separator.insert(v);
@@ -423,15 +429,15 @@ impl HashMapGraph {
         None
     }
 
-    pub fn find_clique_minimal_separator(&self) -> Option<FnvHashSet<usize>> {
-        let empty = FnvHashSet::default();
+    pub fn find_clique_minimal_separator(&self) -> Option<FxHashSet<usize>> {
+        let empty = FxHashSet::default();
         self.clique_minimal_separator_helper(&empty)
     }
 
     fn clique_minimal_separator_helper(
         &self,
-        ignore: &FnvHashSet<usize>,
-    ) -> Option<FnvHashSet<usize>> {
+        ignore: &FxHashSet<usize>,
+    ) -> Option<FxHashSet<usize>> {
         // Algorithm in 'An Introduction to Clique Minimal SeparatorDecomposition'
         let mut working_graph = self.clone();
         for v in ignore.iter().copied() {
@@ -440,8 +446,8 @@ impl HashMapGraph {
         let mut triangulated_graph = self.clone();
 
         let mut alpha = Vec::with_capacity(self.data.len());
-        let mut generators: FnvHashSet<usize> = FnvHashSet::default();
-        let mut labels: FnvHashMap<usize, usize> =
+        let mut generators: FxHashSet<usize> = FxHashSet::default();
+        let mut labels: FxHashMap<usize, usize> =
             working_graph.data.keys().copied().map(|k| (k, 0)).collect();
 
         let mut s: Option<usize> = None;
@@ -463,10 +469,10 @@ impl HashMapGraph {
             }
             s = Some(*labels.get(&x).unwrap());
 
-            let mut reached: FnvHashSet<_> = FnvHashSet::default();
+            let mut reached: FxHashSet<_> = FxHashSet::default();
             reached.insert(x);
-            let mut reach: FnvHashMap<usize, FnvHashSet<usize>> = (0..working_order)
-                .map(|i| (i, FnvHashSet::default()))
+            let mut reach: FxHashMap<usize, FxHashSet<usize>> = (0..working_order)
+                .map(|i| (i, FxHashSet::default()))
                 .collect();
             working_graph.data.get(&x).unwrap().iter().for_each(|i| {
                 reached.insert(*i);
@@ -525,18 +531,18 @@ impl HashMapGraph {
         None
     }
 
-    pub fn separate(&self, separator: &FnvHashSet<usize>) -> Vec<FnvHashSet<usize>> {
-        let mut components: Vec<FnvHashSet<_>> = Vec::with_capacity(2);
+    pub fn separate(&self, separator: &FxHashSet<usize>) -> Vec<FxHashSet<usize>> {
+        let mut components: Vec<FxHashSet<_>> = Vec::with_capacity(2);
 
         let mut stack: Vec<_> = Vec::with_capacity(self.data.len());
-        let mut visited = FnvHashSet::with_capacity_and_hasher(self.data.len(), Default::default());
+        let mut visited = FxHashSet::with_capacity_and_hasher(self.data.len(), Default::default());
         for u in self.data.keys().copied() {
             if separator.contains(&u) || visited.contains(&u) {
                 continue;
             }
             stack.push(u);
             visited.insert(u);
-            let mut component: FnvHashSet<_> = FnvHashSet::default();
+            let mut component: FxHashSet<_> = FxHashSet::default();
             component.insert(u);
             while let Some(v) = stack.pop() {
                 for x in self.data.get(&v).unwrap().iter() {
@@ -553,7 +559,7 @@ impl HashMapGraph {
         components
     }
 
-    pub fn vertex_induced_subgraph(&self, vertex_set: &FnvHashSet<usize>) -> Self {
+    pub fn vertex_induced_subgraph(&self, vertex_set: &FxHashSet<usize>) -> Self {
         let mut subgraph = HashMapGraph::with_capacity(vertex_set.len());
         for u in vertex_set.iter() {
             for v in vertex_set
@@ -571,9 +577,9 @@ impl HashMapGraph {
         u: usize,
         v: usize,
         count: &mut usize,
-        vertex_to_count: &mut FnvHashMap<usize, usize>,
-        discovered: &mut FnvHashMap<usize, usize>,
-        ignore: &FnvHashSet<usize>,
+        vertex_to_count: &mut FxHashMap<usize, usize>,
+        discovered: &mut FxHashMap<usize, usize>,
+        ignore: &FxHashSet<usize>,
     ) -> Option<usize> {
         #[cfg(feature = "handle-ctrlc")]
         if received_ctrl_c() {
@@ -643,13 +649,13 @@ impl<'a> Iterator for HashMapGraphDfs<'a> {
 
 impl MutableGraph for HashMapGraph {
     fn add_vertex(&mut self, u: usize) {
-        self.data.entry(u).or_insert_with(FnvHashSet::default);
+        self.data.entry(u).or_insert_with(FxHashSet::default);
     }
 
     fn add_vertex_with_capacity(&mut self, u: usize, capacity: usize) {
         self.data
             .entry(u)
-            .or_insert_with(|| FnvHashSet::with_capacity_and_hasher(capacity, Default::default()));
+            .or_insert_with(|| FxHashSet::with_capacity_and_hasher(capacity, Default::default()));
     }
 
     fn remove_vertex(&mut self, u: usize) {
@@ -662,9 +668,9 @@ impl MutableGraph for HashMapGraph {
 
     fn add_edge(&mut self, u: usize, v: usize) {
         assert_ne!(u, v);
-        let first = self.data.entry(u).or_insert_with(FnvHashSet::default);
+        let first = self.data.entry(u).or_insert_with(FxHashSet::default);
         first.insert(v);
-        let second = self.data.entry(v).or_insert_with(FnvHashSet::default);
+        let second = self.data.entry(v).or_insert_with(FxHashSet::default);
         second.insert(u);
     }
 
@@ -716,13 +722,13 @@ impl MutableGraph for HashMapGraph {
 
     fn new() -> Self {
         HashMapGraph {
-            data: FnvHashMap::default(),
+            data: FxHashMap::default(),
         }
     }
 
     fn with_capacity(capacity: usize) -> Self {
         HashMapGraph {
-            data: FnvHashMap::with_capacity_and_hasher(capacity, Default::default()),
+            data: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
         }
     }
 }
@@ -766,7 +772,7 @@ impl BaseGraph for HashMapGraph {
     }
 
     fn is_almost_simplicial(&self, u: usize) -> bool {
-        let mut check: Option<FnvHashSet<_>> = None;
+        let mut check: Option<FxHashSet<_>> = None;
         let nb = self.data.get(&u).unwrap();
         for v in nb.iter().copied() {
             for w in nb

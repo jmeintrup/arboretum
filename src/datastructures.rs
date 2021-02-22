@@ -1,6 +1,6 @@
 use bitvec::prelude::*;
 use core::mem;
-use fnv::FnvHashMap;
+use fxhash::FxHashMap;
 use num::{NumCast, ToPrimitive};
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
@@ -428,8 +428,8 @@ impl Index<usize> for BitSet {
 
 pub struct BinaryQueue {
     heap: Vec<usize>,
-    values: FnvHashMap<usize, i64>,
-    indices: FnvHashMap<usize, usize>,
+    values: FxHashMap<usize, i64>,
+    indices: FxHashMap<usize, usize>,
 }
 
 enum ChildType {
@@ -441,8 +441,8 @@ impl BinaryQueue {
     pub fn new() -> Self {
         Self {
             heap: Vec::default(),
-            values: FnvHashMap::default(),
-            indices: FnvHashMap::default(),
+            values: FxHashMap::default(),
+            indices: FxHashMap::default(),
         }
     }
 

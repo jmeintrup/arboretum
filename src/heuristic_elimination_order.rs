@@ -4,7 +4,7 @@ use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use crate::solver::{AtomSolver, Bounds, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
-use fnv::{FnvHashMap, FnvHashSet};
+use fxhash::{FxHashMap, FxHashSet};
 #[cfg(feature = "log")]
 use log::info;
 use std::cmp::max;
@@ -61,12 +61,12 @@ impl Selector for MinDegreeSelector {
 
 pub struct MinFillSelector {
     graph: HashMapGraph,
-    cache: FnvHashMap<usize, usize>,
+    cache: FxHashMap<usize, usize>,
 }
 
 impl From<HashMapGraph> for MinFillSelector {
     fn from(graph: HashMapGraph) -> Self {
-        let mut cache = FnvHashMap::with_capacity_and_hasher(graph.order(), Default::default());
+        let mut cache = FxHashMap::with_capacity_and_hasher(graph.order(), Default::default());
         for u in graph.vertices() {
             cache.insert(u, 0);
         }
@@ -209,7 +209,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
 
     fn compute(self) -> ComputationResult {
         #[cfg(feature = "log")]
-        info!(" computing heuristic elimination td");
+        info!("computing heuristic elimination td");
         let mut tree_decomposition = TreeDecomposition::default();
         if self.selector.graph().order() <= self.lowerbound + 1 {
             tree_decomposition.add_bag(self.selector.graph().vertices().collect());
@@ -222,7 +222,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
         let mut selector = self.selector;
         let mut pq = BinaryQueue::new();
 
-        let mut eliminated_in_bag: FnvHashMap<usize, usize> = FnvHashMap::default();
+        let mut eliminated_in_bag: FxHashMap<usize, usize> = FxHashMap::default();
 
         for v in selector.graph().vertices() {
             pq.insert(v, selector.value(v))
@@ -238,7 +238,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
                 #[cfg(feature = "log")]
-                info!(" breaking heuristic elimination td due to ctrl+c");
+                info!("breaking heuristic elimination td due to ctrl+c");
                 break;
             }
 
@@ -249,7 +249,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
                 });
             }
 
-            let nb: FnvHashSet<usize> = selector.graph().neighborhood(u).collect();
+            let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
             max_bag = max(max_bag, nb.len() + 1);
             stack.push(u);
             let mut bag = nb.clone();
@@ -276,7 +276,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
 
         if selector.graph().order() > 0 {
             let u = selector.graph().vertices().next().unwrap();
-            let rest: FnvHashSet<usize> = selector.graph().vertices().collect();
+            let rest: FxHashSet<usize> = selector.graph().vertices().collect();
             let id = tree_decomposition.add_bag(rest);
             eliminated_in_bag.insert(u, id);
             stack.push(u);
@@ -342,8 +342,8 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
     let mut selector: S = S::from(graph);
     let mut pq = BinaryQueue::new();
 
-    let mut bags: FnvHashMap<usize, FnvHashSet<usize>> = FnvHashMap::default();
-    let mut eliminated_at: FnvHashMap<usize, usize> = FnvHashMap::default();
+    let mut bags: FxHashMap<usize, FxHashSet<usize>> = FxHashMap::default();
+    let mut eliminated_at: FxHashMap<usize, usize> = FxHashMap::default();
 
     for v in selector.graph().vertices() {
         pq.insert(v, selector.value(v))
@@ -361,7 +361,7 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
             break;
         }
 
-        let mut nb: FnvHashSet<usize> = selector.graph().neighborhood(u).collect();
+        let mut nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
         max_bag = max(max_bag, nb.len() + 1);
         stack.push(u);
         bags.insert(u, nb.clone());
@@ -386,7 +386,7 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
     }
 
     if selector.graph().order() > 0 {
-        let mut rest: FnvHashSet<usize> = selector.graph().vertices().collect();
+        let mut rest: FxHashSet<usize> = selector.graph().vertices().collect();
         let u = rest.iter().next().copied().unwrap();
         rest.remove(&u);
         bags.insert(u, rest);
@@ -426,7 +426,7 @@ mod tests {
     use crate::graph::MutableGraph;
     use crate::heuristic_elimination_order::{MinFillSelector, Selector};
     use crate::io::PaceReader;
-    use fnv::FnvHashMap;
+    use fxhash::FxHashMap;
     use std::convert::TryFrom;
     use std::fs::File;
     use std::io::BufReader;
@@ -447,13 +447,13 @@ mod tests {
         let graph = HashMapGraph::try_from(reader).unwrap();
 
         let vertices: Vec<_> = graph.vertices().collect();
-        let fc1: FnvHashMap<_, _> = vertices
+        let fc1: FxHashMap<_, _> = vertices
             .iter()
             .map(|v| (*v, graph.fill_in_count(*v) as i64))
             .collect();
 
         let selector = MinFillSelector::from(graph);
-        let fc2: FnvHashMap<_, _> = vertices.iter().map(|v| (*v, selector.value(*v))).collect();
+        let fc2: FxHashMap<_, _> = vertices.iter().map(|v| (*v, selector.value(*v))).collect();
 
         for v in fc1.keys() {
             assert_eq!(fc1.get(v).unwrap(), fc2.get(v).unwrap());
@@ -486,11 +486,11 @@ mod tests {
             let mut b: Vec<_> = graph.vertices().collect();
             b.sort_unstable();
             assert_eq!(a, b);
-            let fc1: FnvHashMap<_, _> = vertices
+            let fc1: FxHashMap<_, _> = vertices
                 .iter()
                 .map(|v| (*v, graph.fill_in_count(*v) as i64))
                 .collect();
-            let fc2: FnvHashMap<_, _> = vertices.iter().map(|v| (*v, selector.value(*v))).collect();
+            let fc2: FxHashMap<_, _> = vertices.iter().map(|v| (*v, selector.value(*v))).collect();
 
             for v in fc1.keys() {
                 assert_eq!(fc1.get(v).unwrap(), fc2.get(v).unwrap());
