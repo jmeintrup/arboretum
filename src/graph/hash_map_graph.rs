@@ -186,18 +186,15 @@ impl HashMapGraph {
         new_td.flatten();
         if let Some(result) = self.minor_safe_helper(new_td, max_tries, max_missing, seed) {
             Some(result)
+        } else if use_min_degree {
+            let mut new_td = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
+                .compute()
+                .computed_tree_decomposition()
+                .unwrap();
+            new_td.flatten();
+            self.minor_safe_helper(new_td, max_tries, max_missing, seed)
         } else {
-            if use_min_degree {
-                let mut new_td =
-                    HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
-                        .compute()
-                        .computed_tree_decomposition()
-                        .unwrap();
-                new_td.flatten();
-                self.minor_safe_helper(new_td, max_tries, max_missing, seed)
-            } else {
-                None
-            }
+            None
         }
     }
 
