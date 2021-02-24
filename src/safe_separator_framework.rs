@@ -13,7 +13,7 @@ use std::rc::Rc;
 use log::info;
 
 #[derive(PartialEq, PartialOrd, Eq, Ord, Clone, Copy, Debug)]
-enum SeparationLevel {
+pub (crate) enum SeparationLevel {
     Connected,
     BiConnected,
     TriConnected,
@@ -21,6 +21,12 @@ enum SeparationLevel {
     AlmostClique,
     MinorSafeClique,
     Atomic,
+}
+
+impl Default for SeparationLevel {
+    fn default() -> Self {
+        Self::Connected
+    }
 }
 
 impl SeparationLevel {
@@ -33,6 +39,83 @@ impl SeparationLevel {
             Self::AlmostClique => Some(Self::MinorSafeClique),
             Self::MinorSafeClique => Some(Self::Atomic),
             Self::Atomic => None,
+        }
+    }
+
+    pub fn find_separator(
+        &self,
+        graph: &HashMapGraph,
+        limits: &SafeSeparatorLimits,
+        seed: Option<u64>,
+    ) -> SeparatorSearchResult {
+        match self {
+            SeparationLevel::Connected => {
+                if graph.order() <= limits.size_one_separator {
+                    match graph.find_safe_bi_connected_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
+                } else {
+                    SeparatorSearchResult::Delayed
+                }
+            }
+            SeparationLevel::BiConnected => {
+                if graph.order() <= limits.size_two_separator {
+                    match graph.find_safe_bi_connected_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
+                } else {
+                    SeparatorSearchResult::Delayed
+                }
+            }
+            SeparationLevel::TriConnected => {
+                if graph.order() <= limits.size_three_separator {
+                    match graph.find_safe_tri_connected_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
+                } else {
+                    SeparatorSearchResult::Delayed
+                }
+            }
+            SeparationLevel::Clique => {
+                if graph.order() <= limits.clique_separator {
+                    match graph.find_clique_minimal_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
+                } else {
+                    SeparatorSearchResult::Delayed
+                }
+            }
+            SeparationLevel::AlmostClique => {
+                if graph.order() <= limits.almost_clique_separator {
+                    match graph.find_almost_clique_minimal_separator() {
+                        None => SeparatorSearchResult::None,
+                        Some(s) => SeparatorSearchResult::Some(s),
+                    }
+                } else {
+                    SeparatorSearchResult::Delayed
+                }
+            }
+            SeparationLevel::MinorSafeClique => {
+                if graph.order() <= limits.minor_safe_separator {
+                    match graph.find_minor_safe_separator(
+                        None,
+                        seed,
+                        limits.minor_safe_separator_tries,
+                        limits.minor_safe_separator_max_missing,
+                        false,
+                    ) {
+                        None => SeparatorSearchResult::None,
+                        Some(result) => SeparatorSearchResult::Some(result.separator),
+                    }
+                } else {
+                    SeparatorSearchResult::Delayed
+                }
+            }
+            _ => SeparatorSearchResult::None,
         }
     }
 }
@@ -122,7 +205,7 @@ impl<'a> SearchState<'a> {
                 return TreeDecomposition::with_root(self.graph.vertices().collect());
             }
 
-            match Self::find_separator(&self.graph, &self.limits, &self.separation_level, self.seed)
+            match self.separation_level.find_separator(&self.graph, &self.limits, self.seed)
             {
                 SeparatorSearchResult::Some(separator) => {
                     #[cfg(log)]
@@ -252,10 +335,9 @@ impl<'a> SearchState<'a> {
                     };
                 }
 
-                match Self::find_separator(
+                match self.separation_level.find_separator(
                     &self.graph,
                     &self.limits,
-                    &self.separation_level,
                     self.seed,
                 ) {
                     SeparatorSearchResult::Some(separator) => {
@@ -404,86 +486,9 @@ impl<'a> SearchState<'a> {
             },
         }
     }
-
-    fn find_separator(
-        graph: &HashMapGraph,
-        limits: &SafeSeparatorLimits,
-        separation_level: &SeparationLevel,
-        seed: Option<u64>,
-    ) -> SeparatorSearchResult {
-        match separation_level {
-            SeparationLevel::Connected => {
-                if graph.order() <= limits.size_one_separator {
-                    match graph.find_safe_bi_connected_separator() {
-                        None => SeparatorSearchResult::None,
-                        Some(s) => SeparatorSearchResult::Some(s),
-                    }
-                } else {
-                    SeparatorSearchResult::Delayed
-                }
-            }
-            SeparationLevel::BiConnected => {
-                if graph.order() <= limits.size_two_separator {
-                    match graph.find_safe_bi_connected_separator() {
-                        None => SeparatorSearchResult::None,
-                        Some(s) => SeparatorSearchResult::Some(s),
-                    }
-                } else {
-                    SeparatorSearchResult::Delayed
-                }
-            }
-            SeparationLevel::TriConnected => {
-                if graph.order() <= limits.size_three_separator {
-                    match graph.find_safe_tri_connected_separator() {
-                        None => SeparatorSearchResult::None,
-                        Some(s) => SeparatorSearchResult::Some(s),
-                    }
-                } else {
-                    SeparatorSearchResult::Delayed
-                }
-            }
-            SeparationLevel::Clique => {
-                if graph.order() <= limits.clique_separator {
-                    match graph.find_clique_minimal_separator() {
-                        None => SeparatorSearchResult::None,
-                        Some(s) => SeparatorSearchResult::Some(s),
-                    }
-                } else {
-                    SeparatorSearchResult::Delayed
-                }
-            }
-            SeparationLevel::AlmostClique => {
-                if graph.order() <= limits.almost_clique_separator {
-                    match graph.find_almost_clique_minimal_separator() {
-                        None => SeparatorSearchResult::None,
-                        Some(s) => SeparatorSearchResult::Some(s),
-                    }
-                } else {
-                    SeparatorSearchResult::Delayed
-                }
-            }
-            SeparationLevel::MinorSafeClique => {
-                if graph.order() <= limits.minor_safe_separator {
-                    match graph.find_minor_safe_separator(
-                        None,
-                        seed,
-                        limits.minor_safe_separator_tries,
-                        limits.minor_safe_separator_max_missing,
-                        false,
-                    ) {
-                        None => SeparatorSearchResult::None,
-                        Some(result) => SeparatorSearchResult::Some(result.separator),
-                    }
-                } else {
-                    SeparatorSearchResult::Delayed
-                }
-            }
-            _ => SeparatorSearchResult::None,
-        }
-    }
 }
 
-enum SeparatorSearchResult {
+pub enum SeparatorSearchResult {
     Some(FxHashSet<usize>),
     None,
     Delayed,
@@ -491,16 +496,16 @@ enum SeparatorSearchResult {
 
 #[derive(Clone, Copy)]
 pub struct SafeSeparatorLimits {
-    size_one_separator: usize,
-    size_two_separator: usize,
-    size_three_separator: usize,
-    clique_separator: usize,
-    almost_clique_separator: usize,
-    minor_safe_separator: usize,
-    minor_safe_separator_max_missing: usize,
-    minor_safe_separator_tries: usize,
-    check_again_before_atom: bool,
-    use_min_degree_for_minor_safe: bool,
+    pub(crate) size_one_separator: usize,
+    pub(crate) size_two_separator: usize,
+    pub(crate) size_three_separator: usize,
+    pub(crate) clique_separator: usize,
+    pub(crate) almost_clique_separator: usize,
+    pub(crate) minor_safe_separator: usize,
+    pub(crate) minor_safe_separator_max_missing: usize,
+    pub(crate) minor_safe_separator_tries: usize,
+    pub(crate) check_again_before_atom: bool,
+    pub(crate) use_min_degree_for_minor_safe: bool,
 }
 
 impl Default for SafeSeparatorLimits {

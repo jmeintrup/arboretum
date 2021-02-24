@@ -1,16 +1,20 @@
 use crate::exact::TamakiPid;
-use crate::graph::{BaseGraph, HashMapGraph};
+use crate::graph::{BaseGraph, HashMapGraph, MutableGraph};
 use crate::heuristic_elimination_order::{
     HeuristicEliminationDecomposer, MinDegreeSelector, MinFillDegreeSelector, MinFillSelector,
     Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::rule_based_reducer::RuleBasedPreprocessor;
-use crate::safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits};
-use crate::tree_decomposition::TreeDecomposition;
+use crate::safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits, SeparationLevel, SeparatorSearchResult};
+use crate::tree_decomposition::{TreeDecomposition, TreeDecompositionValidationError};
 #[cfg(feature = "log")]
 use log::info;
-use std::cmp::max;
+use std::cmp::{max, Ordering};
+use std::collections::BinaryHeap;
+use std::rc::Rc;
+use std::cell::{Cell, RefCell, RefMut, Ref};
+use fxhash::FxHashSet;
 
 pub trait DynamicUpperboundHeuristic: AtomSolver {}
 impl<S: Selector> DynamicUpperboundHeuristic for HeuristicEliminationDecomposer<S> {}
@@ -312,7 +316,31 @@ impl Solver {
             if components.len() > 1 {
                 td.add_bag(Default::default());
             }
-            for sub_graph in components.iter().map(|c| graph.vertex_induced(c)) {
+            'outer: for sub_graph in components.iter().map(|c| graph.vertex_induced(c)) {
+                if sub_graph.order() <= 2 {
+                    let idx = td.add_bag(sub_graph.vertices().collect());
+                    if td.bags.len() > 1 {
+                        td.add_edge(0, idx);
+                    }
+                    continue;
+                }
+                let mut star_solver = StarSolver::from(sub_graph.clone());
+                loop {
+                    match star_solver.step() {
+                        StarResult::Solver(solver) => {
+                            star_solver = solver;
+                        }
+                        StarResult::Finished(tmp) => {
+                            if td.bags.len() == 0 {
+                                td = tmp;
+                            } else {
+                                td.combine_with(0, tmp);
+                            }
+                            continue 'outer;
+                        }
+                    }
+                }
+
                 #[cfg(feature = "log")]
                 info!(
                     "attempting to solve subgraph with {} vertices",
@@ -415,6 +443,221 @@ impl ComputationResult {
         match self {
             ComputationResult::ComputedTreeDecomposition(td) => Some(td),
             _ => None,
+        }
+    }
+}
+
+#[derive(Default)]
+struct StarState {
+    lowerbound:Rc<Cell<usize>>,
+    level: SeparationLevel,
+    graph: HashMapGraph,
+    parent_state: Option<Rc<RefCell<StarState>>>,
+    td: TreeDecomposition,
+    number_of_unprocessed_children: usize,
+}
+
+impl StarState {
+    fn pull_up(self) -> Option<TreeDecomposition> {
+        let td = self.td;
+        let parent = self.parent_state;
+        if parent.is_none() {
+            return Some(td);
+        }
+        let number_of_unprocessed_children;
+        let parent = parent.unwrap();
+        {
+            let mut parent: RefMut<_> = parent.borrow_mut();
+            parent.td.combine_with_or_replace(0, td);
+            parent.number_of_unprocessed_children-=1;
+            number_of_unprocessed_children = parent.number_of_unprocessed_children;
+        }
+
+        if number_of_unprocessed_children == 0 {
+            let parent = parent.replace(Default::default());
+            return parent.pull_up();
+        }
+        /*if let Some(mut parent) = parent {
+            let mut parent: RefMut<_> = parent.borrow_mut();
+            parent.td.combine_with_or_replace(0, td);
+            parent.number_of_unprocessed_children-=1;
+            /*if parent.number_of_unprocessed_children == 0 {
+                return parent.pull_up();
+            }*/
+        } else if self.number_of_unprocessed_children == 0 { // finished
+            return Some(td)
+        }*/
+        None
+    }
+}
+
+impl PartialOrd for StarState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Option::from(self.graph.order().cmp(&other.graph.order()))
+    }
+}
+
+impl Ord for StarState {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.graph.order().cmp(&other.graph.order())
+    }
+}
+
+impl PartialEq for StarState {
+    fn eq(&self, other: &Self) -> bool {
+        self.graph.order().eq(&other.graph.order())
+    }
+}
+
+impl Eq for StarState {}
+
+
+pub struct StarSolver {
+    queue: Vec<Rc<RefCell<StarState>>>,
+    seed: Option<u64>,
+}
+
+
+impl From<HashMapGraph> for StarSolver {
+    fn from(graph: HashMapGraph) -> Self {
+        let mut tmp = Self {
+            queue: Default::default(),
+            seed: None,
+        };
+         let state = StarState {
+            lowerbound: Rc::new(Cell::new(0)),
+            level: SeparationLevel::Connected,
+            graph,
+            td: Default::default(),
+            parent_state: Default::default(),
+            number_of_unprocessed_children: 0
+        };
+        let state = Rc::new(RefCell::new(state));
+        tmp.queue.push(state);
+        tmp
+    }
+}
+
+const NO_LIMITS: SafeSeparatorLimits = SafeSeparatorLimits {
+    size_one_separator: usize::MAX,
+    size_two_separator: usize::MAX,
+    size_three_separator: usize::MAX,
+    clique_separator: usize::MAX,
+    almost_clique_separator: usize::MAX,
+    minor_safe_separator: usize::MAX,
+    minor_safe_separator_max_missing: usize::MAX,
+    minor_safe_separator_tries: 25,
+    check_again_before_atom: false,
+    use_min_degree_for_minor_safe: false
+};
+
+pub enum StarResult {
+    Solver(StarSolver),
+    Finished(TreeDecomposition),
+}
+
+impl<'a> StarSolver {
+    fn atom(self, state: Rc<RefCell<StarState>>) -> StarResult {
+        let mut state = state.replace(Default::default());
+        let pid_result = TamakiPid::with_graph(&state.graph).compute();
+        let td = match pid_result {
+            ComputationResult::ComputedTreeDecomposition(td) => td,
+            ComputationResult::Bounds(_) => {
+                TreeDecomposition::with_root(state.graph.vertices().collect())
+            },
+        };
+        state.td = td;
+
+        match state.pull_up() {
+            None => StarResult::Solver(self),
+            Some(td) => StarResult::Finished(td),
+        }
+    }
+
+    fn fork(mut self, state: Rc<RefCell<StarState>>, separator: FxHashSet<usize>) -> StarResult {
+        let connected_components;
+        let lowerbound;
+        let level;
+        {
+            let mut tmp: RefMut<_> = state.borrow_mut();
+            connected_components = tmp.graph.separate(&separator);
+            tmp.number_of_unprocessed_children = connected_components.len();
+            tmp.td.add_bag(separator.clone());
+            lowerbound = tmp.lowerbound.clone();
+            level = tmp.level.clone();
+        }
+        
+        for cc in connected_components {
+            let mut graph = state.borrow().graph.vertex_induced(&cc);
+            for v in separator.iter() {
+                for u in separator.iter().filter(|u| v < *u) {
+                    graph.add_edge(*v, *u);
+                }
+                for u in state.borrow().graph
+                    .neighborhood_set(*v)
+                    .iter()
+                    .filter(|u| cc.contains(*u))
+                {
+                    graph.add_edge(*v, *u);
+                }
+            }
+
+            let next_star_state = StarState {
+                lowerbound: lowerbound.clone(),
+                level,
+                graph,
+                parent_state: Option::from(state.clone()),
+                td: Default::default(),
+                number_of_unprocessed_children: 0
+            };
+            self.queue.push(Rc::new(RefCell::new(next_star_state)));
+        }
+        StarResult::Solver(self)
+    }
+
+    pub fn step(mut self) -> StarResult {
+        let mut state= self.queue.pop().unwrap();
+        let order;
+        let lowerbound;
+        let level;
+        {
+            let tmp: Ref<_> = state.borrow();
+            order = tmp.graph.order();
+            lowerbound = tmp.lowerbound.get();
+            level = tmp.level;
+        }
+        if order <= lowerbound {
+            self.atom(state)
+        } else {
+            let result;
+            {
+                let level = state.borrow().level;
+                result = level.find_separator(&state.borrow().graph, &NO_LIMITS, self.seed);
+            }
+            match result {
+                SeparatorSearchResult::Some(separator) => {
+                    self.fork(state, separator)
+                }
+                _ => {
+                    let level;
+                    {
+                        let star_state: Ref<_> = state.borrow();
+                        level = star_state.level.increment();
+                    }
+                    match level {
+                        None => {
+                            self.atom(state)
+                        }
+                        Some(next_level) => {
+                            {
+                                state.borrow_mut().level = next_level;
+                            }
+                            self.queue.push(state);
+                            StarResult::Solver(self)
+                        }
+                    }
+                }
+            }
         }
     }
 }

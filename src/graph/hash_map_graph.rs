@@ -16,7 +16,7 @@ use std::collections::VecDeque;
 use crate::signals::received_ctrl_c;
 use crate::solver::AtomSolver;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct HashMapGraph {
     data: FxHashMap<usize, FxHashSet<usize>>,
 }
