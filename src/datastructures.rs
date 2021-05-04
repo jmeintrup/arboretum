@@ -1,12 +1,14 @@
 use bitvec::prelude::*;
 use core::mem;
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use num::{NumCast, ToPrimitive};
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{AddAssign, Div, Index};
+use std::rc::Rc;
 use std::{fmt, iter};
 
 #[derive(Clone, Default)]
@@ -546,6 +548,91 @@ impl BinaryQueue {
         } else {
             Some(idx)
         }
+    }
+}
+
+struct Wrapper<T>(Rc<RefCell<FxHashSet<T>>>);
+
+impl<T> PartialEq for Wrapper<T>
+where
+    T: Eq + Hash,
+{
+    fn eq(&self, other: &Wrapper<T>) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> Eq for Wrapper<T> where T: Eq + Hash {}
+
+impl<T> Hash for Wrapper<T> {
+    fn hash<H>(&self, _state: &mut H)
+    where
+        H: Hasher,
+    {
+        let x_ptr: *const FxHashSet<T> = self.0.as_ptr();
+        x_ptr.hash(_state)
+    }
+}
+
+pub struct PartitionRefinement<T: Hash + Clone + Eq + Debug> {
+    partition: FxHashMap<T, Rc<RefCell<FxHashSet<T>>>>,
+    tmp: FxHashMap<Wrapper<T>, Rc<RefCell<FxHashSet<T>>>>,
+}
+
+impl<T: Hash + Clone + Eq + Debug> Debug for PartitionRefinement<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let partition: FxHashMap<_, _> = self
+            .partition
+            .iter()
+            .map(|(k, v)| (k.clone(), v.borrow().clone()))
+            .collect();
+        partition.fmt(f)
+    }
+}
+
+impl<T: Hash + Clone + Eq + Debug> PartitionRefinement<T> {
+    pub fn partition(&self) -> &FxHashMap<T, Rc<RefCell<FxHashSet<T>>>> {
+        &self.partition
+    }
+
+    pub fn new(universe: FxHashSet<T>) -> Self {
+        let clone = Rc::new(RefCell::new(universe.clone()));
+        Self {
+            partition: universe
+                .iter()
+                .map(|x| (x.clone(), clone.clone()))
+                .collect(),
+            tmp: Default::default(),
+        }
+    }
+
+    pub fn refine(&mut self, set: &FxHashSet<T>) {
+        for x in set {
+            {
+                let s_i = self.partition.get(x).unwrap().clone();
+                self.tmp.entry(Wrapper(s_i.clone())).or_insert_with(|| Rc::new(Default::default()));
+            }
+
+            {
+                let s_i = self.partition.get(x).unwrap().clone();
+                let s_j = self.tmp.get(&Wrapper(s_i.clone())).unwrap().clone();
+                s_i.borrow_mut().remove(x);
+                self.tmp.insert(Wrapper(s_i.clone()), s_j);
+            }
+
+            {
+                let s_i = self.partition.get(x).unwrap().clone();
+                let s_j = self.tmp.get(&Wrapper(s_i)).unwrap();
+                s_j.borrow_mut().insert(x.clone());
+            }
+
+            {
+                let s_i = self.partition.get(x).unwrap().clone();
+                self.partition
+                    .insert(x.clone(), self.tmp.get(&Wrapper(s_i)).unwrap().clone());
+            }
+        }
+        self.tmp.clear();
     }
 }
 

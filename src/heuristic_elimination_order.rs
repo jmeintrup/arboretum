@@ -98,30 +98,12 @@ impl Selector for MinFillSelector {
     }
 
     fn eliminate_vertex(&mut self, v: usize) {
-        if self.fill_in_count(v) == 0 {
-            self.eliminate_fill0(v);
-        } else {
-            let mut to_add: Vec<(usize, usize)> = vec![];
-            for u in self.graph.neighborhood_set(v) {
-                for w in self
-                    .graph
-                    .neighborhood_set(v)
-                    .iter()
-                    .filter(|w| u < *w && !self.graph.has_edge(*u, **w))
-                {
-                    to_add.push((*u, *w));
-                }
-            }
-            for (u, w) in to_add {
-                self.add_edge(u, w);
-            }
-            self.remove_vertex(v);
-        }
+        self.eliminate_with_info(v);
     }
 }
 
 impl MinFillSelector {
-    fn add_edge(&mut self, u: usize, v: usize) {
+    pub(crate) fn add_edge(&mut self, u: usize, v: usize) {
         self.graph.add_edge(u, v);
         for x in self.graph.neighborhood_set(u) {
             if self.graph.has_edge(*x, v) {
@@ -129,6 +111,18 @@ impl MinFillSelector {
                 *self.cache.get_mut(&u).unwrap() += 1;
                 *self.cache.get_mut(&v).unwrap() += 1;
             }
+        }
+    }
+
+    pub(crate) fn add_edges<'a, T: IntoIterator<Item = &'a (usize, usize)>>(&mut self, iter: T) {
+        for (u, v) in iter {
+            self.add_edge(*u, *v);
+        }
+    }
+
+    pub(crate) fn remove_edges<'a, T: IntoIterator<Item = &'a (usize, usize)>>(&mut self, iter: T) {
+        for (u, v) in iter {
+            self.remove_edge(*u, *v);
         }
     }
 
@@ -140,7 +134,7 @@ impl MinFillSelector {
         self.cache.remove(&u);
     }
 
-    fn remove_edge(&mut self, u: usize, v: usize) {
+    pub(crate) fn remove_edge(&mut self, u: usize, v: usize) {
         self.graph.remove_edge(u, v);
 
         for x in self.graph.neighborhood_set(u) {
@@ -152,7 +146,7 @@ impl MinFillSelector {
         }
     }
 
-    fn eliminate_fill0(&mut self, u: usize) {
+    fn eliminate_fill0(&mut self, u: usize) -> FillInfo {
         if self.graph.degree(u) > 1 {
             let delta = self.graph.degree(u) - 1;
             let graph = &self.graph;
@@ -162,12 +156,63 @@ impl MinFillSelector {
             });
         }
         self.graph.remove_vertex(u);
+        FillInfo {
+            added_edges: vec![],
+            neighborhood: self.graph.neighborhood_set(u).clone(),
+            eliminated_vertex: u,
+        }
     }
 
-    fn fill_in_count(&self, u: usize) -> usize {
+    pub(crate) fn fill_in_count(&self, u: usize) -> usize {
         let deg = self.graph.degree(u);
         (deg * deg - deg) / 2 - self.cache.get(&u).unwrap()
     }
+
+    pub(crate) fn eliminate_with_info(&mut self, v: usize) -> FillInfo {
+        if self.fill_in_count(v) == 0 {
+            self.eliminate_fill0(v)
+        } else {
+            let neighborhood = self.graph.neighborhood_set(v).clone();
+            let mut added_edges: Vec<(usize, usize)> = vec![];
+            for u in self.graph.neighborhood_set(v) {
+                for w in self
+                    .graph
+                    .neighborhood_set(v)
+                    .iter()
+                    .filter(|w| u < *w && !self.graph.has_edge(*u, **w))
+                {
+                    added_edges.push((*u, *w));
+                }
+            }
+            for (u, w) in &added_edges {
+                self.add_edge(*u, *w);
+            }
+            self.remove_vertex(v);
+            FillInfo {
+                added_edges,
+                neighborhood,
+                eliminated_vertex: v,
+            }
+        }
+    }
+
+    pub(crate) fn undo_elimination(&mut self, fill_info: FillInfo) {
+        for (u, v) in fill_info.added_edges {
+            self.add_edge(u, v);
+        }
+        self.graph.add_vertex(fill_info.eliminated_vertex);
+        self.cache
+            .insert(fill_info.eliminated_vertex, Default::default());
+        for u in fill_info.neighborhood {
+            self.add_edge(u, fill_info.eliminated_vertex);
+        }
+    }
+}
+
+pub(crate) struct FillInfo {
+    added_edges: Vec<(usize, usize)>,
+    neighborhood: FxHashSet<usize>,
+    eliminated_vertex: usize,
 }
 
 pub trait Selector: From<HashMapGraph> {
@@ -184,6 +229,150 @@ pub struct HeuristicEliminationDecomposer<S: Selector> {
     selector: S,
     lowerbound: usize,
     upperbound: usize,
+}
+
+pub struct EliminationOrderDecomposer {
+    graph: HashMapGraph,
+    permutation: Vec<usize>,
+    eliminated_in_bag: FxHashMap<usize, usize>,
+}
+
+impl EliminationOrderDecomposer {
+    pub fn new(graph: HashMapGraph, permutation: Vec<usize>) -> Self {
+        Self {
+            graph,
+            permutation,
+            eliminated_in_bag: Default::default(),
+        }
+    }
+
+    pub fn compute(mut self) -> PermutationDecompositionResult {
+        let mut tree_decomposition: TreeDecomposition = Default::default();
+        for u in self.permutation.iter().copied() {
+            let nb: FxHashSet<usize> = self.graph.neighborhood(u).collect();
+            let mut bag = nb.clone();
+            bag.insert(u);
+            self.eliminated_in_bag
+                .insert(u, tree_decomposition.add_bag(bag));
+            self.graph.eliminate_vertex(u);
+        }
+        permutation_td_connect_helper(
+            &mut tree_decomposition,
+            &self.permutation,
+            &self.eliminated_in_bag,
+        );
+
+        PermutationDecompositionResult {
+            permutation: self.permutation,
+            tree_decomposition,
+            eliminated_in_bag: self.eliminated_in_bag,
+        }
+    }
+}
+
+fn permutation_td_connect_helper(
+    tree_decomposition: &mut TreeDecomposition,
+    permutation: &[usize],
+    eliminated_in_bag: &FxHashMap<usize, usize>,
+) {
+    for v in permutation.iter() {
+        let bag_id = eliminated_in_bag.get(v).unwrap();
+
+        let mut neighbor: Option<usize> = None;
+        for u in tree_decomposition.bags[*bag_id].vertex_set.iter() {
+            let candidate_neighbor = &tree_decomposition.bags[*eliminated_in_bag
+                .get(u)
+                .unwrap_or(&(tree_decomposition.bags.len() - 1))];
+            if candidate_neighbor.id == *bag_id {
+                continue;
+            }
+            neighbor = {
+                if neighbor.is_none() || neighbor.unwrap() > candidate_neighbor.id {
+                    Some(candidate_neighbor.id)
+                } else {
+                    neighbor
+                }
+            };
+        }
+        if let Some(neighbor) = neighbor {
+            tree_decomposition.add_edge(*bag_id, neighbor);
+        }
+    }
+}
+
+impl<S: Selector> HeuristicEliminationDecomposer<S> {
+    pub fn compute_order_and_decomposition(self) -> Option<PermutationDecompositionResult> {
+        #[cfg(feature = "log")]
+        info!("computing heuristic elimination td");
+        let mut selector = self.selector;
+        let mut permutation: Vec<usize> = vec![];
+        let upperbound = self.upperbound;
+        let lowerbound = self.lowerbound;
+        let mut tree_decomposition = TreeDecomposition::default();
+        let mut eliminated_in_bag: FxHashMap<usize, usize> = FxHashMap::default();
+
+        if selector.graph().order() > self.lowerbound + 1 {
+            let mut max_bag = 2;
+            let mut pq = BinaryQueue::new();
+            for v in selector.graph().vertices() {
+                pq.insert(v, selector.value(v))
+            }
+            while let Some((u, _)) = pq.pop_min() {
+                if selector.graph().order() <= max_bag || selector.graph().order() <= lowerbound + 1
+                {
+                    break;
+                }
+
+                #[cfg(feature = "handle-ctrlc")]
+                if crate::signals::received_ctrl_c() {
+                    // unknown lowerbound
+                    #[cfg(feature = "log")]
+                    info!("breaking heuristic elimination td due to ctrl+c");
+                    break;
+                }
+
+                if selector.graph().degree(u) > upperbound {
+                    return None;
+                }
+
+                let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
+                max_bag = max(max_bag, nb.len() + 1);
+                permutation.push(u);
+                let mut bag = nb.clone();
+                bag.insert(u);
+                eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
+                selector.eliminate_vertex(u);
+                for u in nb {
+                    pq.insert(u, selector.value(u));
+                }
+            }
+        }
+
+        // remaining vertices, arbitrary order
+        while selector.graph().order() > 0 {
+            let u = selector.graph().vertices().next().unwrap();
+            let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
+            permutation.push(u);
+            let mut bag = nb.clone();
+            bag.insert(u);
+            eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
+            selector.eliminate_vertex(u);
+        }
+
+        permutation_td_connect_helper(&mut tree_decomposition, &permutation, &eliminated_in_bag);
+
+        Some(PermutationDecompositionResult {
+            permutation,
+            tree_decomposition,
+            eliminated_in_bag,
+        })
+    }
+}
+
+pub struct PermutationDecompositionResult {
+    pub permutation: Vec<usize>,
+    pub tree_decomposition: TreeDecomposition,
+    pub eliminated_in_bag: FxHashMap<usize, usize>,
 }
 
 impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
@@ -208,127 +397,14 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
     }
 
     fn compute(self) -> ComputationResult {
-        #[cfg(feature = "log")]
-        info!("computing heuristic elimination td");
-        let mut tree_decomposition = TreeDecomposition::default();
-        if self.selector.graph().order() <= self.lowerbound + 1 {
-            tree_decomposition.add_bag(self.selector.graph().vertices().collect());
-            return ComputationResult::ComputedTreeDecomposition(tree_decomposition);
+        let bounds = Bounds {
+            lowerbound: self.lowerbound,
+            upperbound: self.upperbound,
+        };
+        match self.compute_order_and_decomposition() {
+            None => ComputationResult::Bounds(bounds),
+            Some(result) => ComputationResult::ComputedTreeDecomposition(result.tree_decomposition),
         }
-
-        let mut max_bag = 2;
-        let upperbound = self.upperbound;
-        let lowerbound = self.lowerbound;
-        let mut selector = self.selector;
-        let mut pq = BinaryQueue::new();
-
-        let mut eliminated_in_bag: FxHashMap<usize, usize> = FxHashMap::default();
-
-        for v in selector.graph().vertices() {
-            pq.insert(v, selector.value(v))
-        }
-
-        let mut stack: Vec<usize> = vec![];
-        while let Some((u, _)) = pq.pop_min() {
-            if selector.graph().order() <= max_bag || selector.graph().order() <= lowerbound + 1 {
-                break;
-            }
-
-            #[cfg(feature = "handle-ctrlc")]
-            if crate::signals::received_ctrl_c() {
-                // unknown lowerbound
-                #[cfg(feature = "log")]
-                info!("breaking heuristic elimination td due to ctrl+c");
-                break;
-            }
-
-            if selector.graph().degree(u) > upperbound {
-                return ComputationResult::Bounds(Bounds {
-                    lowerbound,
-                    upperbound,
-                });
-            }
-
-            let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
-            max_bag = max(max_bag, nb.len() + 1);
-            stack.push(u);
-            let mut bag = nb.clone();
-            bag.insert(u);
-            eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
-            selector.eliminate_vertex(u);
-
-            /*let tmp: Vec<_> = nb
-            .iter()
-            .copied()
-            .filter(|u| selector.graph().neighborhood_set(*u).len() < nb.len())
-            .collect();*/
-
-            // eliminate directly, as these are subsets of the current bag
-            /*for u in tmp {
-                selector.eliminate_vertex(u);
-                nb.remove(&u);
-                pq.remove(u);
-            }*/
-            for u in nb {
-                pq.insert(u, selector.value(u));
-            }
-        }
-
-        if selector.graph().order() > 0 {
-            let u = selector.graph().vertices().next().unwrap();
-            let rest: FxHashSet<usize> = selector.graph().vertices().collect();
-            let id = tree_decomposition.add_bag(rest);
-            eliminated_in_bag.insert(u, id);
-            stack.push(u);
-        }
-
-        for v in stack.iter() {
-            let bag_id = eliminated_in_bag.get(v).unwrap();
-
-            let mut neighbor: Option<usize> = None;
-            for u in tree_decomposition.bags[*bag_id].vertex_set.iter() {
-                let candidate_neighbor = &tree_decomposition.bags[*eliminated_in_bag
-                    .get(u)
-                    .unwrap_or(&(tree_decomposition.bags.len() - 1))];
-                if candidate_neighbor.id == *bag_id {
-                    continue;
-                }
-                neighbor = {
-                    if neighbor.is_none() || neighbor.unwrap() > candidate_neighbor.id {
-                        Some(candidate_neighbor.id)
-                    } else {
-                        neighbor
-                    }
-                };
-            }
-            if let Some(neighbor) = neighbor {
-                tree_decomposition.add_edge(*bag_id, neighbor);
-            }
-        }
-
-        /*for v in stack.iter().rev() {
-            let mut nb = bags.remove(v).unwrap();
-            let old_bag_id = match tree_decomposition
-                .bags
-                .iter()
-                .find(|old_bag| old_bag.vertex_set.is_superset(&nb))
-            {
-                Some(old_bag) => Some(old_bag.id),
-                None => None,
-            };
-            match old_bag_id {
-                Some(old_bag_id) => {
-                    nb.insert(*v);
-                    let id = tree_decomposition.add_bag(nb);
-                    tree_decomposition.add_edge(old_bag_id, id);
-                }
-                None => {
-                    nb.insert(*v);
-                    tree_decomposition.add_bag(nb);
-                }
-            }
-        }*/
-        ComputationResult::ComputedTreeDecomposition(tree_decomposition)
     }
 }
 /*
