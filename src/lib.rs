@@ -17,6 +17,7 @@ pub mod graph;
 pub mod heuristic_elimination_order;
 pub mod io;
 pub mod lowerbound;
+pub mod meta_heuristics;
 pub mod solver;
 pub mod tree_decomposition;
 

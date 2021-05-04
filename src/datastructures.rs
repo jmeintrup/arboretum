@@ -610,7 +610,9 @@ impl<T: Hash + Clone + Eq + Debug> PartitionRefinement<T> {
         for x in set {
             {
                 let s_i = self.partition.get(x).unwrap().clone();
-                self.tmp.entry(Wrapper(s_i.clone())).or_insert_with(|| Rc::new(Default::default()));
+                self.tmp
+                    .entry(Wrapper(s_i.clone()))
+                    .or_insert_with(|| Rc::new(Default::default()));
             }
 
             {

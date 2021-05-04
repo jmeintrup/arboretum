@@ -217,10 +217,8 @@ impl QuickBB {
             // undo edge addition
             self.working_graph.remove_edges(&edges);
             if let Some(v) = final_branching_vertex {
-                self.vertex_elimination_map.insert(
-                    search_state.elimination_set.clone(),
-                    v,
-                );
+                self.vertex_elimination_map
+                    .insert(search_state.elimination_set.clone(), v);
             }
             self.memory.insert(search_state.clone(), width);
         }
