@@ -283,7 +283,6 @@ impl<'a> SearchState<'a> {
                     };
                 }
 
-
                 match Self::find_separator(
                     &self.graph,
                     &self.limits,

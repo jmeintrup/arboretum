@@ -5,14 +5,14 @@ use crate::heuristic_elimination_order::{
 use crate::solver::{AtomSolver, Bounds, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
 use fxhash::{FxHashMap, FxHashSet};
+#[cfg(feature = "log")]
+use log::info;
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
 use std::cmp::max;
-#[cfg(feature = "log")]
-use log::info;
 
-const DEFAULT_EPOCHS: usize = 10;
-const DEFAULT_STEPS: usize = 10;
+const DEFAULT_EPOCHS: usize = 100;
+const DEFAULT_STEPS: usize = 30;
 const DEFAULT_SEED: u64 = 1337;
 const DEFAULT_MAX_TABU: usize = 7;
 
@@ -179,7 +179,6 @@ impl AtomSolver for TabuLocalSearch {
                 info!("stopping tabu local search td due to timeout!");
                 break;
             }
-
 
             let tmp =
                 EliminationOrderDecomposer::new(self.graph.clone(), permutation.clone()).compute();

@@ -141,6 +141,7 @@ pub enum AtomSolverType {
     MinFillDegree,
     Tamaki,
     TabuLocalSearch,
+    TabuLocalSearchInfinite,
     Custom(DynamicExact),
 }
 
@@ -187,6 +188,12 @@ impl AtomSolverType {
             AtomSolverType::TabuLocalSearch => {
                 TabuLocalSearch::with_bounds(sub_graph, lowerbound, upperbound)
                     .seed(seed)
+                    .compute()
+            }
+            AtomSolverType::TabuLocalSearchInfinite => {
+                TabuLocalSearch::with_bounds(sub_graph, lowerbound, upperbound)
+                    .seed(seed)
+                    .epochs(usize::MAX)
                     .compute()
             }
             AtomSolverType::Custom(solver) => solver(sub_graph, lowerbound, upperbound),

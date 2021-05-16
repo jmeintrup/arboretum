@@ -1,6 +1,6 @@
 use arboretum::graph::HashMapGraph;
 use arboretum::io::{PaceReader, PaceWriter};
-use arboretum::solver::Solver;
+use arboretum::solver::{AlgorithmTypes, AtomSolverType, Solver};
 use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -45,9 +45,9 @@ struct Opt {
     #[structopt(short, long)]
     seed: Option<u64>,
 
-    /// Optional timeout value for heuristic algorithm. Runs indefinitely if missing. In heuristic mode
+    /// Optional timeout value for heuristic algorithm. In heuristic mode
     /// the CLI stops on ctrl+c and outputs the current best solution. This might take a few seconds or minutes depending
-    /// on the size of the input graph.
+    /// on the size of the input graph. When timeout is set, the algorithm tries to optimize a solution until the timeout is reached.
     #[structopt(short, long)]
     timeout: Option<u64>,
 }
@@ -92,18 +92,34 @@ fn main() -> io::Result<()> {
             arboretum::signals::initialize();
 
             let timeout: Option<u64> = opt.timeout;
+            let use_timeout = timeout.is_some();
             if let Some(timeout) = timeout {
                 arboretum::timeout::initialize_timeout(timeout);
             }
 
-            #[cfg(log)]
-            info!("Running in default heuristic mode.");
-            Solver::default_heuristic()
-                .safe_separator_limits(
-                    SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
-                )
-                .seed(opt.seed)
-                .solve(&graph)
+            if use_timeout {
+                #[cfg(log)]
+                info!("Running in default timeout heuristic mode.");
+                Solver::default_heuristic()
+                    .safe_separator_limits(
+                        SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
+                    )
+                    .seed(opt.seed)
+                    .algorithm_types(
+                        AlgorithmTypes::default()
+                            .atom_solver(AtomSolverType::TabuLocalSearchInfinite),
+                    )
+                    .solve(&graph)
+            } else {
+                #[cfg(log)]
+                info!("Running in default heuristic mode.");
+                Solver::default_heuristic()
+                    .safe_separator_limits(
+                        SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
+                    )
+                    .seed(opt.seed)
+                    .solve(&graph)
+            }
         }
         "auto" => {
             #[cfg(log)]
