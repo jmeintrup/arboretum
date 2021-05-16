@@ -91,6 +91,11 @@ fn main() -> io::Result<()> {
             #[cfg(feature = "handle-ctrlc")]
             arboretum::signals::initialize();
 
+            let timeout: Option<u64> = opt.timeout;
+            if let Some(timeout) = timeout {
+                arboretum::timeout::initialize_timeout(timeout);
+            }
+
             #[cfg(log)]
             info!("Running in default heuristic mode.");
             Solver::default_heuristic()

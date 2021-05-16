@@ -346,11 +346,12 @@ impl<'a> SearchState<'a> {
             };
         }
 
-        match self
-            .algorithms
-            .atom_solver
-            .compute(self.graph.borrow(), lowerbound, upperbound, self.seed.unwrap_or(0))
-        {
+        match self.algorithms.atom_solver.compute(
+            self.graph.borrow(),
+            lowerbound,
+            upperbound,
+            self.seed.unwrap_or(0),
+        ) {
             ComputationResult::ComputedTreeDecomposition(td) => {
                 let lb: &Cell<_> = self.lower_bound.borrow();
                 let atom_lowerbound = td.max_bag_size - 1;

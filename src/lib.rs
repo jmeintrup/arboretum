@@ -29,6 +29,9 @@ pub use safe_separator_framework::{SafeSeparatorFramework, SafeSeparatorLimits};
 #[cfg(feature = "handle-ctrlc")]
 pub mod signals;
 
+#[cfg(feature = "cli")]
+pub mod timeout;
+
 #[cfg(feature = "log")]
 #[cfg(feature = "env_logger")]
 pub mod log;

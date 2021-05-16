@@ -3,6 +3,7 @@ use crate::heuristic_elimination_order::{
     EliminationOrderDecomposer, PermutationDecompositionResult,
 };
 use crate::solver::{AtomSolver, Bounds, ComputationResult};
+use crate::tree_decomposition::TreeDecomposition;
 use fxhash::{FxHashMap, FxHashSet};
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
@@ -138,6 +139,12 @@ impl AtomSolver for TabuLocalSearch {
     }
 
     fn compute(mut self) -> ComputationResult {
+        if self.graph.order() <= 2 {
+            return ComputationResult::ComputedTreeDecomposition(TreeDecomposition::with_root(
+                self.graph.vertices().collect(),
+            ));
+        }
+
         assert!(self.max_tabu_size + 2 < self.graph.order());
 
         let mut rng: StdRng = SeedableRng::seed_from_u64(self.seed);
