@@ -155,10 +155,11 @@ impl MinFillSelector {
                 *cache.get_mut(&v).unwrap() -= delta;
             });
         }
+        let neighborhood = self.graph.neighborhood_set(u).clone();
         self.graph.remove_vertex(u);
         FillInfo {
             added_edges: vec![],
-            neighborhood: self.graph.neighborhood_set(u).clone(),
+            neighborhood,
             eliminated_vertex: u,
         }
     }

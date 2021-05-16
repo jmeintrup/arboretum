@@ -11,6 +11,7 @@ use crate::tree_decomposition::TreeDecomposition;
 #[cfg(feature = "log")]
 use log::info;
 use std::cmp::max;
+use crate::meta_heuristics::TabuLocalSearch;
 
 pub trait DynamicUpperboundHeuristic: AtomSolver {}
 impl<S: Selector> DynamicUpperboundHeuristic for HeuristicEliminationDecomposer<S> {}
@@ -139,6 +140,7 @@ pub enum AtomSolverType {
     MinDegree,
     MinFillDegree,
     Tamaki,
+    TabuLocalSearch,
     Custom(DynamicExact),
 }
 
@@ -154,6 +156,7 @@ impl AtomSolverType {
         sub_graph: &HashMapGraph,
         lowerbound: usize,
         upperbound: usize,
+        seed: u64
     ) -> ComputationResult {
         match self {
             AtomSolverType::None => ComputationResult::Bounds(Bounds {
@@ -180,6 +183,9 @@ impl AtomSolverType {
             }
             AtomSolverType::Tamaki => {
                 TamakiPid::with_bounds(sub_graph, lowerbound, upperbound).compute()
+            }
+            AtomSolverType::TabuLocalSearch => {
+                TabuLocalSearch::with_bounds(sub_graph, lowerbound, upperbound).seed(seed).compute()
             }
             AtomSolverType::Custom(solver) => solver(sub_graph, lowerbound, upperbound),
         }
@@ -222,7 +228,7 @@ impl Default for Solver {
 impl Solver {
     pub fn default_heuristic() -> Self {
         Self {
-            algorithm_types: AlgorithmTypes::default().atom_solver(AtomSolverType::None),
+            algorithm_types: AlgorithmTypes::default().atom_solver(AtomSolverType::TabuLocalSearch),
             safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
             use_atom_width_as_lower_bound: true,

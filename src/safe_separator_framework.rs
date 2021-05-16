@@ -349,7 +349,7 @@ impl<'a> SearchState<'a> {
         match self
             .algorithms
             .atom_solver
-            .compute(self.graph.borrow(), lowerbound, upperbound)
+            .compute(self.graph.borrow(), lowerbound, upperbound, self.seed.unwrap_or(0))
         {
             ComputationResult::ComputedTreeDecomposition(td) => {
                 let lb: &Cell<_> = self.lower_bound.borrow();

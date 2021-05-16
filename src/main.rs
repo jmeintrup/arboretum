@@ -44,6 +44,12 @@ struct Opt {
     /// Seed used for all rng. Unsigned 64bit integer value. Defaults to '0' if missing.
     #[structopt(short, long)]
     seed: Option<u64>,
+
+    /// Optional timeout value for heuristic algorithm. Runs indefinitely if missing. In heuristic mode
+    /// the CLI stops on ctrl+c and outputs the current best solution. This might take a few seconds or minutes depending
+    /// on the size of the input graph.
+    #[structopt(short, long)]
+    timeout: Option<u64>,
 }
 
 fn main() -> io::Result<()> {
@@ -55,11 +61,8 @@ fn main() -> io::Result<()> {
             "exact" => "exact",
             _ => "exact",
         },
-        None => "exact",
+        None => "heuristic",
     };
-
-    #[cfg(feature = "handle-ctrlc")]
-    arboretum::signals::initialize();
 
     #[cfg(feature = "log")]
     #[cfg(feature = "env_logger")]
@@ -85,6 +88,9 @@ fn main() -> io::Result<()> {
 
     let td = match mode {
         "heuristic" => {
+            #[cfg(feature = "handle-ctrlc")]
+            arboretum::signals::initialize();
+
             #[cfg(log)]
             info!("Running in default heuristic mode.");
             Solver::default_heuristic()
