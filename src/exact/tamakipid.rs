@@ -28,8 +28,8 @@ struct Cache {
 struct DPHelpers<'a> {
     cache: &'a mut Cache,
     ready_queue: &'a mut VecDeque<IBlock>,
-    pending_endorsers: &'a mut Vec<PMC>,
-    solution: &'a mut Option<PMC>,
+    pending_endorsers: &'a mut Vec<Pmc>,
+    solution: &'a mut Option<Pmc>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,9 +68,9 @@ pub struct TamakiPid {
     upper_bound: usize,
     o_block_sieve: LayeredSieve,
     ready_queue: VecDeque<IBlock>,
-    pending_endorsers: Vec<PMC>,
-    endorsers: Vec<PMC>,
-    solution: Option<PMC>,
+    pending_endorsers: Vec<Pmc>,
+    endorsers: Vec<Pmc>,
+    solution: Option<Pmc>,
     cache: Cache,
     state: State,
 }
@@ -105,7 +105,7 @@ impl TamakiPid {
             .collect()
     }
 
-    fn td_rec(&self, parent: usize, td: &mut TreeDecomposition, pmc: &PMC) {
+    fn td_rec(&self, parent: usize, td: &mut TreeDecomposition, pmc: &Pmc) {
         let children = pmc.inbounds.clone();
         for c in children
             .iter()
@@ -167,7 +167,7 @@ impl TamakiPid {
                     self.graph.borrow(),
                     self.cache.block_cache.borrow_mut(),
                 );
-                let pmc = PMC::new(closed_neighborhood, &blocks, self.graph.borrow());
+                let pmc = Pmc::new(closed_neighborhood, &blocks, self.graph.borrow());
 
                 if pmc.valid {
                     if pmc.ready(&self.cache.i_block_cache) {
@@ -419,9 +419,9 @@ impl Block {
             v = rest.get_next_set(v_value + 1);
         }
         Self {
+            outbound,
             component,
             separator,
-            outbound,
         }
     }
 
@@ -435,14 +435,14 @@ impl Block {
 }
 
 #[derive(Clone, Eq, PartialEq)]
-struct PMC {
+struct Pmc {
     vertex_set: BitSet,
     inbounds: Vec<Block>,
     outbound: Option<Block>,
     valid: bool,
 }
 
-impl Debug for PMC {
+impl Debug for Pmc {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let validity = if self.valid {
             "(valid):\n"
@@ -471,7 +471,7 @@ impl Debug for PMC {
     }
 }
 
-impl PMC {
+impl Pmc {
     pub fn new(vertex_set: BitSet, blocks: &[Block], graph: &BitGraph) -> Self {
         if vertex_set.empty() {
             return Self {
@@ -573,7 +573,7 @@ impl PMC {
 #[derive(Clone, Eq, PartialEq)]
 struct IBlock {
     block: Block,
-    endorser: PMC,
+    endorser: Pmc,
 }
 
 impl Ord for IBlock {
@@ -616,7 +616,7 @@ impl Debug for IBlock {
 }
 
 impl IBlock {
-    pub fn new(block: Block, endorser: PMC) -> Self {
+    pub fn new(block: Block, endorser: Pmc) -> Self {
         Self { block, endorser }
     }
 
@@ -730,7 +730,7 @@ impl OBlock {
 
             if new_separator.cardinality() <= target_width + 1 {
                 let blocks = separate_into_blocks(&new_separator, graph, &mut cache.block_cache);
-                let pmc = PMC::new(new_separator, &blocks, graph);
+                let pmc = Pmc::new(new_separator, &blocks, graph);
 
                 if pmc.valid {
                     if pmc.ready(&cache.i_block_cache) {
@@ -782,7 +782,7 @@ impl OBlock {
         }
 
         if full_block.is_none() {
-            let pmc = PMC::new(new_separator, &blocks, graph);
+            let pmc = Pmc::new(new_separator, &blocks, graph);
             if pmc.valid {
                 if pmc.ready(&cache.i_block_cache) {
                     pmc.endorse(
