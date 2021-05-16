@@ -244,12 +244,12 @@ impl AtomSolver for TabuLocalSearch {
             }
             assert!(choices.len() > 1);
             let mut choices: Vec<_> = choices.iter().copied().collect();
-            let i = rng.gen_range(0, choices.len());
+            let i = rng.gen_range(0..choices.len());
             let v = choices[i];
             let v_pos = *pos.get(&v).unwrap();
             choices.swap_remove(i);
 
-            let j = rng.gen_range(0, choices.len());
+            let j = rng.gen_range(0..choices.len());
             let u = choices[j];
             let u_pos = *pos.get(&u).unwrap();
 

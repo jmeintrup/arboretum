@@ -322,7 +322,7 @@ impl HashMapGraph {
                         .filter(|x| !separator.contains(x) && tmp.data.get(&v).unwrap().contains(x))
                         .collect();
                     if !common_neighbors.is_empty() {
-                        let idx: usize = rng.gen_range(0, common_neighbors.len());
+                        let idx: usize = rng.gen_range(0..common_neighbors.len());
                         let contractor = common_neighbors[idx];
                         if rng.gen_bool(0.5) {
                             tmp.contract(contractor, v);

@@ -7,15 +7,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-num = "0.3.0"
-rand = "0.7.3"
+num = "0.4.0"
+rand = "0.8.3"
 fxhash = "0.2.1"
 bitvec = "0.19.1"
 log = { version = "0.4.14", optional = true }
 structopt = { version = "0.3.21", optional = true }
 jemallocator = { version = "0.3.2", optional = true }
 env_logger = { version = "0.8.3", optional = true }
-ctrlc = { version = "3.1.7", optional = true, features = ["termination"] }
+ctrlc = { version = "3.1.9", optional = true, features = ["termination"] }
 
 [features]
 handle-ctrlc=["ctrlc"]
