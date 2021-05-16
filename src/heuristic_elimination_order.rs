@@ -332,6 +332,14 @@ impl<S: Selector> HeuristicEliminationDecomposer<S> {
                     break;
                 }
 
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
+                    // unknown lowerbound
+                    #[cfg(feature = "log")]
+                    info!("breaking heuristic elimination td due to timeout!");
+                    break;
+                }
+
                 if selector.graph().degree(u) > upperbound {
                     return None;
                 }

@@ -8,6 +8,8 @@ use fxhash::{FxHashMap, FxHashSet};
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
 use std::cmp::max;
+#[cfg(feature = "log")]
+use log::info;
 
 const DEFAULT_EPOCHS: usize = 10;
 const DEFAULT_STEPS: usize = 10;
@@ -162,6 +164,23 @@ impl AtomSolver for TabuLocalSearch {
         let mut permutation = self.best.as_ref().unwrap().permutation.clone();
         let mut tabu: Vec<usize> = vec![];
         for _ in 0..self.epochs {
+            #[cfg(feature = "handle-ctrlc")]
+            if crate::signals::received_ctrl_c() {
+                // unknown lowerbound
+                #[cfg(feature = "log")]
+                info!("stopping tabu local search td due to ctrl+c");
+                break;
+            }
+
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
+                // unknown lowerbound
+                #[cfg(feature = "log")]
+                info!("stopping tabu local search td due to timeout!");
+                break;
+            }
+
+
             let tmp =
                 EliminationOrderDecomposer::new(self.graph.clone(), permutation.clone()).compute();
 
@@ -171,6 +190,22 @@ impl AtomSolver for TabuLocalSearch {
             let mut eval = self.fitness(&permutation);
 
             for _ in 0..self.steps {
+                #[cfg(feature = "handle-ctrlc")]
+                if crate::signals::received_ctrl_c() {
+                    // unknown lowerbound
+                    #[cfg(feature = "log")]
+                    info!("stopping tabu local search td due to ctrl+c");
+                    break;
+                }
+
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
+                    // unknown lowerbound
+                    #[cfg(feature = "log")]
+                    info!("stopping tabu local search td due to timeout!");
+                    break;
+                }
+
                 let mut best_neighbor_perm: Option<Vec<usize>> = None;
                 let mut best_neighbor: Option<usize> = None;
                 let mut eval_tmp = f64::MAX;

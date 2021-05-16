@@ -324,6 +324,14 @@ impl AtomSolver for TamakiPid {
                     upperbound: self.upper_bound,
                 });
             }
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
+                return ComputationResult::Bounds(Bounds {
+                    lowerbound: self.target_width,
+                    upperbound: self.upper_bound,
+                });
+            }
+
             match self.step() {
                 StepResult::Working(new_self) => {
                     self = new_self;

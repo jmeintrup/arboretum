@@ -114,10 +114,20 @@ impl<'a> SearchState<'a> {
             // unknown lowerbound
             return TreeDecomposition::with_root(self.graph.vertices().collect());
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            // unknown lowerbound
+            return TreeDecomposition::with_root(self.graph.vertices().collect());
+        }
 
         while self.separation_level < SeparationLevel::MinorSafeClique {
             #[cfg(feature = "handle-ctrlc")]
             if crate::signals::received_ctrl_c() {
+                // unknown lowerbound
+                return TreeDecomposition::with_root(self.graph.vertices().collect());
+            }
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
                 // unknown lowerbound
                 return TreeDecomposition::with_root(self.graph.vertices().collect());
             }
@@ -160,6 +170,14 @@ impl<'a> SearchState<'a> {
                     Some(upperbound_td) => upperbound_td,
                 };
             }
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
+                // unknown lowerbound
+                return match self.upperbound_td {
+                    None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                    Some(upperbound_td) => upperbound_td,
+                };
+            }
 
             if let Some(result) = self.graph.find_minor_safe_separator(
                 self.upperbound_td.clone(),
@@ -179,6 +197,11 @@ impl<'a> SearchState<'a> {
 
                 #[cfg(feature = "handle-ctrlc")]
                 if crate::signals::received_ctrl_c() {
+                    return heuristic_td;
+                }
+
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
                     return heuristic_td;
                 }
 
@@ -252,6 +275,15 @@ impl<'a> SearchState<'a> {
                     };
                 }
 
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
+                    return match self.upperbound_td {
+                        None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                        Some(upperbound_td) => upperbound_td,
+                    };
+                }
+
+
                 match Self::find_separator(
                     &self.graph,
                     &self.limits,
@@ -285,6 +317,14 @@ impl<'a> SearchState<'a> {
             };
         }
 
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            return match self.upperbound_td {
+                None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                Some(upperbound_td) => upperbound_td,
+            };
+        }
+
         let mut log_state = self.log_state.get();
         log_state.increment(self.separation_level);
         log_state.set_max_atom(self.graph.order());
@@ -298,6 +338,17 @@ impl<'a> SearchState<'a> {
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
             // unknown lowerbound
+            return match upperbound_td {
+                Some(td) => td,
+                None => match self.upperbound_td {
+                    None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+                    Some(upperbound_td) => upperbound_td,
+                },
+            };
+        }
+
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
             return match upperbound_td {
                 Some(td) => td,
                 None => match self.upperbound_td {
@@ -340,6 +391,14 @@ impl<'a> SearchState<'a> {
         #[cfg(feature = "handle-ctrlc")]
         if crate::signals::received_ctrl_c() {
             // unknown lowerbound
+            return match upperbound_td {
+                Some(upperbound_td) => upperbound_td,
+                None => TreeDecomposition::with_root(self.graph.vertices().collect()),
+            };
+        }
+
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
             return match upperbound_td {
                 Some(upperbound_td) => upperbound_td,
                 None => TreeDecomposition::with_root(self.graph.vertices().collect()),

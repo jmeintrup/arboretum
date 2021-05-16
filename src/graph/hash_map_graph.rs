@@ -78,6 +78,10 @@ impl HashMapGraph {
             if received_ctrl_c() {
                 return None;
             }
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
+                return None;
+            }
             let mut c = 0;
             let mut l: FxHashMap<usize, usize> = FxHashMap::default();
             let mut d: FxHashMap<usize, usize> = FxHashMap::default();
@@ -111,6 +115,10 @@ impl HashMapGraph {
             {
                 #[cfg(feature = "handle-ctrlc")]
                 if received_ctrl_c() {
+                    return None;
+                }
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
                     return None;
                 }
                 let u = self.data.keys().copied().find(|x| *x != f1 && *x != f2)?;
@@ -234,6 +242,10 @@ impl HashMapGraph {
                 if received_ctrl_c() {
                     return None;
                 }
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
+                    return None;
+                }
                 let second_bag = &td.bags[idx].vertex_set;
                 let candidate: FxHashSet<usize> = first_bag
                     .vertex_set
@@ -263,6 +275,10 @@ impl HashMapGraph {
         if received_ctrl_c() {
             return false;
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            return false;
+        }
         let components = self.separate(separator);
         if components.len() < 2 {
             return false;
@@ -272,6 +288,10 @@ impl HashMapGraph {
         for component in components.iter() {
             #[cfg(feature = "handle-ctrlc")]
             if received_ctrl_c() {
+                return false;
+            }
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
                 return false;
             }
             let rest: FxHashSet<usize> = self
@@ -301,6 +321,10 @@ impl HashMapGraph {
                 for missing_edge in missing_edges.iter() {
                     #[cfg(feature = "handle-ctrlc")]
                     if received_ctrl_c() {
+                        return false;
+                    }
+                    #[cfg(feature = "cli")]
+                    if crate::timeout::timeout() {
                         return false;
                     }
                     if tmp
@@ -338,6 +362,10 @@ impl HashMapGraph {
                         while !pre.contains_key(&u) && !queue.is_empty() {
                             #[cfg(feature = "handle-ctrlc")]
                             if received_ctrl_c() {
+                                return false;
+                            }
+                            #[cfg(feature = "cli")]
+                            if crate::timeout::timeout() {
                                 return false;
                             }
                             let x = queue.pop_front().unwrap();
@@ -417,6 +445,10 @@ impl HashMapGraph {
             if received_ctrl_c() {
                 return None;
             }
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
+                return None;
+            }
             let mut ignore = FxHashSet::default();
             ignore.insert(v);
             if let Some(mut separator) = self.clique_minimal_separator_helper(&ignore) {
@@ -456,6 +488,10 @@ impl HashMapGraph {
         for _ in 0..working_order {
             #[cfg(feature = "handle-ctrlc")]
             if received_ctrl_c() {
+                return None;
+            }
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
                 return None;
             }
             let x = *working_graph
@@ -585,6 +621,10 @@ impl HashMapGraph {
         if received_ctrl_c() {
             return None;
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            return None;
+        }
         *count += 1;
         let mut children = 0;
         vertex_to_count.insert(v, *count);
@@ -605,6 +645,10 @@ impl HashMapGraph {
                 }
                 #[cfg(feature = "handle-ctrlc")]
                 if received_ctrl_c() {
+                    return None;
+                }
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
                     return None;
                 }
                 let v_to_count = *vertex_to_count.get(&v).unwrap();

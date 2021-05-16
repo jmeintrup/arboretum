@@ -30,9 +30,14 @@ impl LowerboundHeuristic for MinorMinWidth {
         while graph.order() > 0 {
             #[cfg(feature = "handle-ctrlc")]
             if received_ctrl_c() {
-                // simply adds all remaining vertices into a single bag
                 return 0;
             }
+
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
+                return 0;
+            }
+
             if let Some(v) = graph
                 .vertices()
                 .filter(|v| graph.degree(*v) > 0)

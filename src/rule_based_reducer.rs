@@ -52,6 +52,13 @@ impl RuleBasedPreprocessor {
                 self.lower_bound = 0;
                 return;
             }
+
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
+                // unknown lowerbound
+                self.lower_bound = 0;
+                return;
+            }
         }
         if self.processed_graph.order() == 0 {
             self.process_stack();
@@ -107,6 +114,14 @@ impl RuleBasedPreprocessor {
             self.lower_bound = 0;
             return false;
         }
+
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
+
         // single-degree
 
         let found = self
@@ -126,6 +141,13 @@ impl RuleBasedPreprocessor {
             self.lower_bound = 0;
             return false;
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
+
         // series
         let found = self
             .processed_graph
@@ -146,6 +168,13 @@ impl RuleBasedPreprocessor {
             self.lower_bound = 0;
             return false;
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
+
         // triangle rule
         self.lower_bound = max(self.lower_bound, 4);
 
@@ -178,6 +207,13 @@ impl RuleBasedPreprocessor {
             self.lower_bound = 0;
             return false;
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
+
         // buddy rule
         let found = self.processed_graph.vertices().find(|v| {
             self.processed_graph.vertices().any(|u| {
@@ -202,6 +238,13 @@ impl RuleBasedPreprocessor {
             self.lower_bound = 0;
             return false;
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
+
         // cube rule
         let mut cube: Option<Cube> = None;
         for v in self.processed_graph.vertices() {
@@ -294,6 +337,13 @@ impl RuleBasedPreprocessor {
             self.lower_bound = 0;
             return false;
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
+
         let found = self
             .processed_graph
             .vertices()
@@ -313,6 +363,13 @@ impl RuleBasedPreprocessor {
             self.lower_bound = 0;
             return false;
         }
+        #[cfg(feature = "cli")]
+        if crate::timeout::timeout() {
+            // unknown lowerbound
+            self.lower_bound = 0;
+            return false;
+        }
+
         let found = self.processed_graph.vertices().find(|v| {
             self.lower_bound > self.processed_graph.degree(*v)
                 && self.processed_graph.is_almost_simplicial(*v)
@@ -356,6 +413,13 @@ impl RuleBasedPreprocessor {
                 self.lower_bound = 0;
                 return;
             }
+            #[cfg(feature = "cli")]
+            if crate::timeout::timeout() {
+                // unknown lowerbound
+                self.lower_bound = 0;
+                return;
+            }
+
             let mut visited: FxHashSet<usize> = FxHashSet::with_capacity_and_hasher(
                 self.processed_graph.order(),
                 Default::default(),
@@ -376,6 +440,13 @@ impl RuleBasedPreprocessor {
                     self.lower_bound = 0;
                     return;
                 }
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
+                    // unknown lowerbound
+                    self.lower_bound = 0;
+                    return;
+                }
+
                 let mut nb: FxHashSet<_> = self.processed_graph.neighborhood(v).collect();
                 if nb.len() > d {
                     continue;
