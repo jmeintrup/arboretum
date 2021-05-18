@@ -101,6 +101,9 @@ fn main() -> io::Result<()> {
             if use_timeout {
                 #[cfg(log)]
                 info!("Running in default timeout heuristic mode.");
+
+                #[cfg(log)]
+                info!("Initializing a timeout for {} seconds.", timeout);
                 Solver::default_heuristic()
                     .safe_separator_limits(
                         SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
@@ -125,12 +128,40 @@ fn main() -> io::Result<()> {
         "auto" => {
             #[cfg(log)]
             info!("Running in default auto mode.");
-            Solver::auto(&graph)
+            #[cfg(feature = "handle-ctrlc")]
+            arboretum::signals::initialize();
+
+            let timeout: Option<u64> = opt.timeout;
+            let use_timeout = timeout.is_some();
+            if let Some(timeout) = timeout {
+                #[cfg(log)]
+                info!("Initializing a timeout for {} seconds.", timeout);
+
+                arboretum::timeout::initialize_timeout(timeout);
+            }
+
+            let mut td = Solver::auto(&graph)
                 .safe_separator_limits(
                     SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
                 )
                 .seed(opt.seed)
-                .solve(&graph)
+                .solve(&graph);
+            if use_timeout && !arboretum::timeout::timeout() {
+                let td2 = Solver::default_heuristic()
+                    .algorithm_types(
+                        AlgorithmTypes::default()
+                            .atom_solver(AtomSolverType::TabuLocalSearchInfinite),
+                    )
+                    .safe_separator_limits(
+                        SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
+                    )
+                    .seed(opt.seed)
+                    .solve(&graph);
+                if td2.max_bag_size < td.max_bag_size {
+                    td = td2;
+                };
+            }
+            td
         }
         "bb" => {
             #[cfg(log)]

@@ -254,13 +254,16 @@ impl Solver {
             0..=3000 => {
                 Self::default_heuristic().algorithm_types(AlgorithmTypes::default().atom_solver(
                     AtomSolverType::Custom(|graph, lowerbound, upperbound| {
-                        if graph.order() <= 150 {
+                        if graph.order() <= 100 {
                             #[cfg(feature = "log")]
                             info!("Attempting to solve atom exactly");
                             TamakiPid::with_bounds(graph, lowerbound, upperbound).compute()
                         } else {
                             #[cfg(feature = "log")]
-                            info!("Atom too large to be solved exactly");
+                            info!("Atom too large to be solved exactly, trying tabu local search");
+                            TabuLocalSearch::with_bounds(graph, lowerbound, upperbound)
+                                .epochs(250)
+                                .compute();
 
                             ComputationResult::Bounds(Bounds {
                                 lowerbound,

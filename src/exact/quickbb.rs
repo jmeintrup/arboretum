@@ -126,10 +126,7 @@ impl SearchState {
                         .working_graph
                         .graph()
                         .has_vertex(self.vertex.unwrap())
-                    && quick_bb
-                    .working_graph
-                    .graph()
-                    .has_vertex(v)
+                    && quick_bb.working_graph.graph().has_vertex(v)
                     && quick_bb
                         .working_graph
                         .graph()
