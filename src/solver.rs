@@ -1,8 +1,8 @@
-use crate::exact::TamakiPid;
+use crate::exact::{QuickBB, TamakiPid};
 use crate::graph::{BaseGraph, HashMapGraph};
 use crate::heuristic_elimination_order::{
-    HeuristicEliminationDecomposer, MinDegreeSelector, MinFillDegreeSelector, MinFillSelector,
-    Selector,
+    EliminationOrderDecomposer, HeuristicEliminationDecomposer, MinDegreeSelector,
+    MinFillDegreeSelector, MinFillSelector, PermutationDecompositionResult, Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::meta_heuristics::TabuLocalSearch;
@@ -142,6 +142,7 @@ pub enum AtomSolverType {
     Tamaki,
     TabuLocalSearch,
     TabuLocalSearchInfinite,
+    QuickBB,
     Custom(DynamicExact),
 }
 
@@ -195,6 +196,9 @@ impl AtomSolverType {
                     .seed(seed)
                     .epochs(usize::MAX)
                     .compute()
+            }
+            AtomSolverType::QuickBB => {
+                QuickBB::with_bounds(sub_graph, lowerbound, upperbound).compute()
             }
             AtomSolverType::Custom(solver) => solver(sub_graph, lowerbound, upperbound),
         }

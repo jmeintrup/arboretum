@@ -1,7 +1,9 @@
 use crate::graph::{BaseGraph, HashMapGraph, MutableGraph};
 use crate::heuristic_elimination_order::{
-    EliminationOrderDecomposer, PermutationDecompositionResult,
+    EliminationOrderDecomposer, HeuristicEliminationDecomposer, MinFillSelector,
+    PermutationDecompositionResult,
 };
+use crate::solver::UpperboundHeuristicType::MinFill;
 use crate::solver::{AtomSolver, Bounds, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
 use fxhash::{FxHashMap, FxHashSet};
@@ -9,7 +11,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use log::info;
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
-use std::cmp::max;
+use std::cmp::{max, min};
 
 const DEFAULT_EPOCHS: usize = 100;
 const DEFAULT_STEPS: usize = 30;
@@ -36,35 +38,37 @@ fn permutation_map(permutation: &[usize]) -> FxHashMap<usize, usize> {
 }
 
 impl TabuLocalSearch {
-    fn fitness(&self, permutation: &[usize]) -> f64 {
-        let vertex_to_position = permutation_map(permutation);
+    fn fitness(&self, permutation: &[usize]) -> usize {
+        let position_map = permutation_map(permutation);
 
         let mut working_graph = self.graph.clone();
 
         let mut max_degree = 0;
         let mut max_bag = 0;
-        let mut fitness = 0.0;
-        let m = permutation.len();
-        for (v_pos, v) in permutation.iter().enumerate() {
-            max_degree = max(max_degree, working_graph.degree(*v));
-            let bag: Vec<_> = working_graph
-                .neighborhood_set(*v)
-                .iter()
-                .filter(|u| {
-                    let u_pos = *vertex_to_position.get(*u).unwrap();
-                    u_pos > v_pos
-                })
-                .copied()
-                .collect();
-            max_bag = max(max_bag, bag.len());
-            fitness += bag.len().pow(2) as f64;
-            for a in &bag {
-                for b in bag.iter().filter(|b| a < *b) {
-                    working_graph.add_edge(*a, *b);
+        let mut result = 0;
+
+        for (pos_of_v, v) in permutation.iter().enumerate() {
+            let mut bag: FxHashSet<usize> = FxHashSet::default();
+            max_degree = max(working_graph.neighborhood_set(*v).len(), max_degree);
+            for u in working_graph.neighborhood_set(*v) {
+                if *position_map.get(u).unwrap() > pos_of_v {
+                    bag.insert(*u);
+                }
+            }
+
+            max_bag = max(bag.len(), max_bag);
+
+            result = result + bag.len() * bag.len();
+
+            for u in &bag {
+                for w in &bag {
+                    if u < w {
+                        working_graph.add_edge(*u, *w);
+                    }
                 }
             }
         }
-        fitness + max_bag.pow(2) as f64 * m.pow(2) as f64
+        result + permutation.len() * permutation.len() * max_bag * max_bag
     }
 
     pub fn new(graph: HashMapGraph) -> Self {
@@ -146,24 +150,26 @@ impl AtomSolver for TabuLocalSearch {
                 self.graph.vertices().collect(),
             ));
         }
+        self.max_tabu_size = min(self.graph.order() - 3, self.max_tabu_size);
 
         assert!(self.max_tabu_size + 2 < self.graph.order());
 
         let mut rng: StdRng = SeedableRng::seed_from_u64(self.seed);
         if self.best.is_none() {
             self.best = Option::from(
-                EliminationOrderDecomposer::new(
-                    self.graph.clone(),
-                    self.graph.vertices().collect(),
-                )
-                .compute(),
+                HeuristicEliminationDecomposer::<MinFillSelector>::with_graph(&self.graph)
+                    .compute_order_and_decomposition()
+                    .unwrap(),
             );
         }
 
         let mut eval_opt = self.fitness(&self.best.as_ref().unwrap().permutation);
         let mut permutation = self.best.as_ref().unwrap().permutation.clone();
         let mut tabu: Vec<usize> = vec![];
-        for _ in 0..self.epochs {
+        for epoch in 0..self.epochs {
+            #[cfg(feature = "log")]
+            info!("TabuLocalSearch: Epoch {}", epoch);
+
             #[cfg(feature = "handle-ctrlc")]
             if crate::signals::received_ctrl_c() {
                 // unknown lowerbound
@@ -207,7 +213,7 @@ impl AtomSolver for TabuLocalSearch {
 
                 let mut best_neighbor_perm: Option<Vec<usize>> = None;
                 let mut best_neighbor: Option<usize> = None;
-                let mut eval_tmp = f64::MAX;
+                let mut eval_tmp = usize::MAX;
 
                 for v in &permutation {
                     if !tabu.contains(v) {
@@ -271,9 +277,14 @@ impl AtomSolver for TabuLocalSearch {
             if eval < eval_opt {
                 let tmp = EliminationOrderDecomposer::new(self.graph.clone(), permutation.clone())
                     .compute();
-                if tmp.tree_decomposition.max_bag_size
-                    < self.best.as_ref().unwrap().tree_decomposition.max_bag_size
-                {
+                let new_width = tmp.tree_decomposition.max_bag_size - 1;
+                let old_width = self.best.as_ref().unwrap().tree_decomposition.max_bag_size - 1;
+                if new_width < old_width {
+                    #[cfg(feature = "log")]
+                    info!(
+                        "TabuLocalSearch: Improved width from {} to {}",
+                        old_width, new_width
+                    );
                     self.best = Some(tmp);
                     eval_opt = eval;
                 }

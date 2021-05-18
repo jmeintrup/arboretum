@@ -10,6 +10,9 @@ use fxhash::{FxHashMap, FxHashSet};
 use std::cmp::max;
 use std::hash::{Hash, Hasher};
 
+#[cfg(log)]
+use log::info;
+
 pub struct QuickBB {
     upperbound: usize,
     lowerbound: usize,
@@ -119,6 +122,14 @@ impl SearchState {
             let v = *set.iter().next().unwrap();
             if quick_bb.clique.contains(&v)
                 || (self.vertex.is_some()
+                    && quick_bb
+                        .working_graph
+                        .graph()
+                        .has_vertex(self.vertex.unwrap())
+                    && quick_bb
+                    .working_graph
+                    .graph()
+                    .has_vertex(v)
                     && quick_bb
                         .working_graph
                         .graph()

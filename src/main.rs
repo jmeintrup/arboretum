@@ -59,6 +59,7 @@ fn main() -> io::Result<()> {
             "heuristic" => "heuristic",
             "auto" => "auto",
             "exact" => "exact",
+            "bb" => "bb",
             _ => "exact",
         },
         None => "heuristic",
@@ -129,6 +130,17 @@ fn main() -> io::Result<()> {
                     SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
                 )
                 .seed(opt.seed)
+                .solve(&graph)
+        }
+        "bb" => {
+            #[cfg(log)]
+            info!("Running in quickBB mode.");
+            Solver::default_exact()
+                .seed(opt.seed)
+                .safe_separator_limits(
+                    SafeSeparatorLimits::default().use_min_degree_for_minor_safe(true),
+                )
+                .algorithm_types(AlgorithmTypes::default().atom_solver(AtomSolverType::QuickBB))
                 .solve(&graph)
         }
         _ => {
