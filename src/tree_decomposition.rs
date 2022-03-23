@@ -248,7 +248,7 @@ impl TreeDecomposition {
     }
 
     pub fn combine_with_or_replace(&mut self, glue_point: usize, other: TreeDecomposition) {
-        if self.bags.is_empty() || (self.bags.len() == 1 && self.bags[0].vertex_set.is_empty()) {
+        if self.bags.is_empty() {
             *self = other;
         } else {
             self.combine_with(glue_point, other);

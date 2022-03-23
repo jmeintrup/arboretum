@@ -11,12 +11,11 @@ once the first version is released on [crates.io](https://crates.io/) The first 
 # Features
 
 * Well known fast heuristics such as min-degree and min-fill [[1]](#1)
-* Metaheuristics such as tabu-local search and genetic algorithms [[3]](#3) and a novel algorithm based on the idea of artificial bee colony 
+* Metaheuristics such as tabu-local search [[3]](#3)
 * Minor-min-width lowerbound heuristic [[4]](#4)
 * Rule-based preprocessing for reducing graphs and obtaining tree-decompositions of graphs of treewidth ≤ 3 [[5]](#5)
 * Graph decomposition based on the notion of safe separators [[6]](#6)
-* State-of-the-art exact algorithms [[2]](#2)[[7]](#7)[[8]](#8)[[9]](#9)
-* A classic branch-and-bound exact algorithm based on QuickBB [[10]](#10)
+* A state-of-the-art exact algorithm [[8]](#8)
 
 # The CLI
 ## Build
@@ -32,7 +31,7 @@ cargo run --release --features="cli" < <graph.gr>
 ```
 or
 ```
-./target/release/arboretum < <graph.gr>
+./target/release/arboretum-cli < <graph.gr>
 ```
 The CLI makes automated choices about which algorithms to use based on the input graph, but without the heuristic flag will always try to find an exact solution.
 

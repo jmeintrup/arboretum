@@ -241,7 +241,7 @@ impl Default for Solver {
 impl Solver {
     pub fn default_heuristic() -> Self {
         Self {
-            algorithm_types: AlgorithmTypes::default().atom_solver(AtomSolverType::TabuLocalSearch),
+            algorithm_types: AlgorithmTypes::default().atom_solver(AtomSolverType::None),
             safe_separator_limits: SafeSeparatorLimits::default(),
             apply_reduction_rules: true,
             use_atom_width_as_lower_bound: true,
@@ -359,7 +359,22 @@ impl Solver {
                     info!("reduced graph to: {}", tmp.graph().order());
 
                     if tmp.graph().order() <= lowerbound + 1 {
-                        td.combine_with_or_replace(0, tmp.into_td());
+                        let tmp_g = tmp.graph().clone();
+                        let mut tmp_td = tmp.into_td();
+                        tmp_td.flatten();
+                        match tmp_td.verify(&tmp_g) {
+                            Ok(_) => {
+                                #[cfg(feature = "log")]
+                                info!("partial td computed after reduction rules is valid!");
+                            }
+                            Err(e) => {
+                                panic!(
+                                    " partial td computed after reduction rules is invalid: {}",
+                                    e
+                                );
+                            }
+                        }
+                        td.combine_with_or_replace(0, tmp_td);
                         continue;
                     }
                     Some(tmp)
@@ -400,12 +415,17 @@ impl Solver {
                         );
                     }
                 }
+
+                #[cfg(feature = "log")]
+                info!("root bag before: {:?}!", td.bags[0]);
                 match reducer {
                     None => td.combine_with_or_replace(0, partial_td),
                     Some(reducer) => {
                         td.combine_with_or_replace(0, reducer.combine_into_td(partial_td))
                     }
                 };
+                #[cfg(feature = "log")]
+                info!("root bag after: {:?}!", td.bags[0]);
             }
         }
         td
