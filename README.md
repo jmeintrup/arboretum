@@ -37,13 +37,23 @@ The CLI makes automated choices about which algorithms to use based on the input
 
 Available CLI arguments:
 
-| Argument        | Description           |
-| ------------- |:-------------|
-| --help     | prints help |
-| --verbose      | adds extensive logging and decomposition information      |
-| --heuristic | sets the mode to heuristic     |
-| --skip-preprocessing | skips running rule-based pre-processing    |
-| --skip-safe-separator | skips running the safe-separator graph decomposition step |
+```
+USAGE:
+    arboretum-cli [OPTIONS] [ARGS]
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -m, --mode <mode>          Mode. 'heuristic', 'exact' or 'auto'. Defaults to Exact. Any invalid input fails silently
+                               to 'heuristic'
+    -s, --seed <seed>          Seed used for all rng. Unsigned 64bit integer value. Defaults to '0' if missing
+    -t, --timeout <timeout>    Optional timeout value for heuristic algorithm. In heuristic mode the CLI stops on ctrl+c
+                               and outputs the current best solution. This might take a few seconds or minutes depending
+                               on the size of the input graph. When timeout is set, the algorithm tries to optimize a
+                               solution until the timeout is reached
+```
 
 
 
