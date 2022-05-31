@@ -62,7 +62,7 @@ fn main() -> io::Result<()> {
             "bb" => "bb",
             _ => "exact",
         },
-        None => "heuristic",
+        None => "exact",
     };
 
     #[cfg(feature = "log")]

@@ -4,10 +4,6 @@
 
 **arboretum** is a  graph library and CLI for computing tree decompositions.
 Various state of the art preprocessing, graph reductions, exact and heuristic algorithms for obtaining tree decompositions are implemented.
-
-*This repository is currently under development, the features and documentation presented here will be valid 
-once the first version is released on [crates.io](https://crates.io/) The first release is planned for January 2021 and will include all the features mentioned here.*
-
 # Features
 
 * Well known fast heuristics such as min-degree and min-fill [[1]](#1)
