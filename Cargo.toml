@@ -3,6 +3,11 @@ name = "arboretum"
 version = "0.1.0"
 authors = ["Johannes Meintrup <johannes.meintrup@mni.thm.de>"]
 edition = "2018"
+license = "MIT"
+description = "A library and CLI for obtaining exact and heuristc tree decompositions for arbitrary graphs"
+homepage = "https://github.com/jmeintrup/arboretum"
+repository = "https://github.com/jmeintrup/arboretum"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
