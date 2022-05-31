@@ -166,7 +166,7 @@ impl AtomSolver for TabuLocalSearch {
         let mut eval_opt = self.fitness(&self.best.as_ref().unwrap().permutation);
         let mut permutation = self.best.as_ref().unwrap().permutation.clone();
         let mut tabu: Vec<usize> = vec![];
-        for _epoch in 0..self.epochs {
+        for epoch in 0..self.epochs {
             #[cfg(feature = "log")]
             info!("TabuLocalSearch: Epoch {}", epoch);
 
