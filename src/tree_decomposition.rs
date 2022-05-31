@@ -31,21 +31,11 @@ impl Display for TreeDecompositionValidationError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TreeDecomposition {
     pub bags: Vec<Bag>,
     pub root: Option<usize>,
     pub max_bag_size: usize,
-}
-
-impl Default for TreeDecomposition {
-    fn default() -> Self {
-        Self {
-            bags: Default::default(),
-            root: None,
-            max_bag_size: 0,
-        }
-    }
 }
 
 impl TreeDecomposition {
@@ -76,8 +66,8 @@ impl TreeDecomposition {
             }
             assert!(!self.bags[neighbor_idx].neighbors.contains(&parent_idx));
 
-            assert_eq!(self.bags[neighbor_idx].neighbors.remove(&old_id), true);
-            assert_eq!(self.bags[neighbor_idx].neighbors.insert(parent_idx), true);
+            assert!(self.bags[neighbor_idx].neighbors.remove(&old_id));
+            assert!(self.bags[neighbor_idx].neighbors.insert(parent_idx));
         }
 
         self.bags[old_bag].neighbors.clear();
@@ -97,8 +87,8 @@ impl TreeDecomposition {
             let old_last = self.bags.len();
             for neighbor in self.bags[id].neighbors.clone() {
                 //println!(" Neighbor {} {:?}", neighbor, self.bags[neighbor]);
-                assert_eq!(self.bags[neighbor].neighbors.remove(&old_last), true);
-                assert_eq!(self.bags[neighbor].neighbors.insert(id), true);
+                assert!(self.bags[neighbor].neighbors.remove(&old_last));
+                assert!(self.bags[neighbor].neighbors.insert(id));
             }
         }
     }
@@ -193,8 +183,8 @@ impl TreeDecomposition {
                 .find(|b| b.vertex_set.is_superset(&separator))
                 .unwrap();
 
-            assert_eq!(new_neighbor.neighbors.remove(&target_bag), true);
-            assert_eq!(new_neighbor.neighbors.insert(new_neighbor.id), true);
+            assert!(new_neighbor.neighbors.remove(&target_bag));
+            assert!(new_neighbor.neighbors.insert(new_neighbor.id));
         }
         self.bags.swap_remove(target_bag);
         self.max_bag_size = self.bags.iter().map(|b| b.vertex_set.len()).max().unwrap();
@@ -223,12 +213,11 @@ impl TreeDecomposition {
                 .neighbors
                 .insert(neighbor_of_target_bag.id);
 
-            assert_eq!(neighbor_of_target_bag.neighbors.remove(&target_bag), true);
-            assert_eq!(
+            assert!(neighbor_of_target_bag.neighbors.remove(&target_bag));
+            assert!(
                 neighbor_of_target_bag
                     .neighbors
-                    .insert(new_neighbor_of_neighbor_of_target_bag.id),
-                true
+                    .insert(new_neighbor_of_neighbor_of_target_bag.id)
             );
         }
         self.bags.extend_from_slice(&td.bags);
@@ -236,8 +225,8 @@ impl TreeDecomposition {
         self.bags.swap(target_bag, old_idx);
         self.bags[target_bag].id = target_bag;
         for id in self.bags[target_bag].neighbors.clone() {
-            assert_eq!(self.bags[id].neighbors.remove(&old_idx), true);
-            assert_eq!(self.bags[id].neighbors.insert(target_bag), true);
+            assert!(self.bags[id].neighbors.remove(&old_idx));
+            assert!(self.bags[id].neighbors.insert(target_bag));
         }
         self.bags.swap_remove(old_idx);
         self.max_bag_size = self.bags.iter().map(|b| b.vertex_set.len()).max().unwrap();
@@ -270,7 +259,7 @@ impl TreeDecomposition {
             .unwrap();
         other_glue_point.neighbors.insert(glue_point);
         self.bags[glue_point].neighbors.insert(other_glue_point.id);
-        self.bags.extend(other.bags.drain(..));
+        self.bags.append(&mut other.bags);
     }
 
     pub fn verify<G: BaseGraph>(&self, graph: &G) -> Result<(), TreeDecompositionValidationError> {
@@ -349,11 +338,10 @@ impl TreeDecomposition {
             for v in graph.vertices() {
                 if u < v
                     && graph.has_edge(u, v)
-                    && self
+                    && !self
                         .bags
                         .iter()
-                        .find(|b| b.vertex_set.contains(&u) && b.vertex_set.contains(&v))
-                        .is_none()
+                        .any(|b| b.vertex_set.contains(&u) && b.vertex_set.contains(&v))
                 {
                     return Some((u, v));
                 }

@@ -3,7 +3,7 @@ use crate::heuristic_elimination_order::{
     EliminationOrderDecomposer, HeuristicEliminationDecomposer, MinFillSelector,
     PermutationDecompositionResult,
 };
-use crate::solver::UpperboundHeuristicType::MinFill;
+
 use crate::solver::{AtomSolver, Bounds, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
 use fxhash::{FxHashMap, FxHashSet};
@@ -58,7 +58,7 @@ impl TabuLocalSearch {
 
             max_bag = max(bag.len(), max_bag);
 
-            result = result + bag.len() * bag.len();
+            result += bag.len() * bag.len();
 
             for u in &bag {
                 for w in &bag {
@@ -166,7 +166,7 @@ impl AtomSolver for TabuLocalSearch {
         let mut eval_opt = self.fitness(&self.best.as_ref().unwrap().permutation);
         let mut permutation = self.best.as_ref().unwrap().permutation.clone();
         let mut tabu: Vec<usize> = vec![];
-        for epoch in 0..self.epochs {
+        for _epoch in 0..self.epochs {
             #[cfg(feature = "log")]
             info!("TabuLocalSearch: Epoch {}", epoch);
 

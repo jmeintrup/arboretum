@@ -139,7 +139,7 @@ impl MinFillSelector {
 
         for x in self.graph.neighborhood_set(u) {
             if self.graph.has_edge(*x, v) {
-                *self.cache.get_mut(&x).unwrap() -= 1;
+                *self.cache.get_mut(x).unwrap() -= 1;
                 *self.cache.get_mut(&u).unwrap() -= 1;
                 *self.cache.get_mut(&v).unwrap() -= 1;
             }

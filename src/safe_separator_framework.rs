@@ -59,8 +59,8 @@ impl<'a> SearchState<'a> {
             lower_bound: self.lower_bound.clone(),
             log_state: self.log_state.clone(),
             upperbound_td,
-            limits: &self.limits,
-            algorithms: &self.algorithms,
+            limits: self.limits,
+            algorithms: self.algorithms,
             seed: self.seed,
             use_atom_width_as_lower_bound: self.use_atom_width_as_lower_bound,
         }
@@ -91,7 +91,7 @@ impl<'a> SearchState<'a> {
             let lb: &Cell<_> = &self.lower_bound;
             lb.set(max(lb.get(), td.max_bag_size - 1));
         }
-        for cc in self.graph.separate(&separator).iter() {
+        for cc in self.graph.separate(separator).iter() {
             let graph = self.graph_from_cc(cc, separator);
 
             let search_sate = self.fork(graph, None);
@@ -132,7 +132,7 @@ impl<'a> SearchState<'a> {
                 return TreeDecomposition::with_root(self.graph.vertices().collect());
             }
 
-            match Self::find_separator(&self.graph, &self.limits, &self.separation_level, self.seed)
+            match Self::find_separator(&self.graph, self.limits, &self.separation_level, self.seed)
             {
                 SeparatorSearchResult::Some(separator) => {
                     #[cfg(log)]
@@ -285,7 +285,7 @@ impl<'a> SearchState<'a> {
 
                 match Self::find_separator(
                     &self.graph,
-                    &self.limits,
+                    self.limits,
                     &self.separation_level,
                     self.seed,
                 ) {

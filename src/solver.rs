@@ -1,8 +1,8 @@
 use crate::exact::{QuickBB, TamakiPid};
 use crate::graph::{BaseGraph, HashMapGraph};
 use crate::heuristic_elimination_order::{
-    EliminationOrderDecomposer, HeuristicEliminationDecomposer, MinDegreeSelector,
-    MinFillDegreeSelector, MinFillSelector, PermutationDecompositionResult, Selector,
+    HeuristicEliminationDecomposer, MinDegreeSelector,
+    MinFillDegreeSelector, MinFillSelector, Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::meta_heuristics::TabuLocalSearch;
@@ -45,10 +45,10 @@ impl LowerboundHeuristicType {
                 if limit > &graph.order() {
                     graph.vertices().map(|v| graph.degree(v)).min().unwrap_or(0)
                 } else {
-                    MinorMinWidth::with_graph(&graph).compute()
+                    MinorMinWidth::with_graph(graph).compute()
                 }
             }
-            LowerboundHeuristicType::Custom(heuristic) => heuristic(&graph),
+            LowerboundHeuristicType::Custom(heuristic) => heuristic(graph),
         }
     }
 }
@@ -79,22 +79,22 @@ impl UpperboundHeuristicType {
             UpperboundHeuristicType::None => None,
             UpperboundHeuristicType::MinFill => {
                 let decomposer: HeuristicEliminationDecomposer<MinFillSelector> =
-                    HeuristicEliminationDecomposer::with_bounds(&graph, lowerbound, graph.order());
+                    HeuristicEliminationDecomposer::with_bounds(graph, lowerbound, graph.order());
                 Some(decomposer.compute().computed_tree_decomposition().unwrap())
             }
             UpperboundHeuristicType::MinDegree => {
                 let decomposer: HeuristicEliminationDecomposer<MinDegreeSelector> =
-                    HeuristicEliminationDecomposer::with_bounds(&graph, lowerbound, graph.order());
+                    HeuristicEliminationDecomposer::with_bounds(graph, lowerbound, graph.order());
                 Some(decomposer.compute().computed_tree_decomposition().unwrap())
             }
             UpperboundHeuristicType::MinFillDegree => {
                 let decomposer: HeuristicEliminationDecomposer<MinFillDegreeSelector> =
-                    HeuristicEliminationDecomposer::with_bounds(&graph, lowerbound, graph.order());
+                    HeuristicEliminationDecomposer::with_bounds(graph, lowerbound, graph.order());
                 Some(decomposer.compute().computed_tree_decomposition().unwrap())
             }
             UpperboundHeuristicType::All => {
                 let a = HeuristicEliminationDecomposer::<MinFillSelector>::with_bounds(
-                    &graph,
+                    graph,
                     lowerbound,
                     graph.order(),
                 )
@@ -102,7 +102,7 @@ impl UpperboundHeuristicType {
                 .computed_tree_decomposition()
                 .unwrap();
                 let b = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_bounds(
-                    &graph,
+                    graph,
                     lowerbound,
                     graph.order(),
                 )
@@ -110,7 +110,7 @@ impl UpperboundHeuristicType {
                 .computed_tree_decomposition()
                 .unwrap();
                 let c = HeuristicEliminationDecomposer::<MinFillDegreeSelector>::with_bounds(
-                    &graph,
+                    graph,
                     lowerbound,
                     graph.order(),
                 )
@@ -127,7 +127,7 @@ impl UpperboundHeuristicType {
                 Some(best)
             }
             UpperboundHeuristicType::Custom(decomposer) => {
-                decomposer(&graph, lowerbound, graph.order() - 1).computed_tree_decomposition()
+                decomposer(graph, lowerbound, graph.order() - 1).computed_tree_decomposition()
             }
         }
     }

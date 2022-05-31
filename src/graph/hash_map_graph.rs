@@ -793,7 +793,7 @@ impl BaseGraph for HashMapGraph {
             for u in vertices.iter().skip(i + 1) {
                 assert!(self.data.contains_key(&u));
                 if !self.data.get(&v).unwrap().contains(&u)
-                    || !self.data.get(&u).unwrap().contains(&v)
+                    || !self.data.get(u).unwrap().contains(v)
                 {
                     return false;
                 }
