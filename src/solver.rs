@@ -1,8 +1,8 @@
 use crate::exact::{QuickBB, TamakiPid};
 use crate::graph::{BaseGraph, HashMapGraph};
 use crate::heuristic_elimination_order::{
-    HeuristicEliminationDecomposer, MinDegreeSelector,
-    MinFillDegreeSelector, MinFillSelector, Selector,
+    HeuristicEliminationDecomposer, MinDegreeSelector, MinFillDegreeSelector, MinFillSelector,
+    Selector,
 };
 use crate::lowerbound::{LowerboundHeuristic, MinorMinWidth};
 use crate::meta_heuristics::TabuLocalSearch;

@@ -39,7 +39,7 @@ impl HashMapGraph {
         self.data.contains_key(&u)
     }
     pub fn neighborhood_set(&self, u: usize) -> &FxHashSet<usize> {
-        &self.data.get(&u).unwrap()
+        self.data.get(&u).unwrap()
     }
     pub fn dfs(&self, u: usize) -> HashMapGraphDfs {
         assert!(self.data.contains_key(&u));
@@ -143,13 +143,9 @@ impl HashMapGraph {
                         return Some(set);
                     }
                     // check if graph contains vertex v with N(v) = {p, f1, f2}
-                    let not_found = self
-                        .data
-                        .iter()
-                        .find(|(_, v)| {
-                            v.len() == 3 && v.contains(&p) && v.contains(&f1) && v.contains(&f2)
-                        })
-                        .is_none();
+                    let not_found = !self.data.iter().any(|(_, v)| {
+                        v.len() == 3 && v.contains(&p) && v.contains(&f1) && v.contains(&f2)
+                    });
                     if not_found {
                         let mut set: FxHashSet<usize> = FxHashSet::default();
                         set.insert(f1);
@@ -165,8 +161,7 @@ impl HashMapGraph {
                     separator.insert(p);
                     let components = self.separate(&separator);
                     if components.len() > 2
-                        || components.len() == 2
-                            && components.iter().find(|c| c.len() <= 1).is_none()
+                        || components.len() == 2 && !components.iter().any(|c| c.len() <= 1)
                     {
                         let mut set: FxHashSet<usize> = FxHashSet::default();
                         set.insert(f1);
@@ -187,7 +182,7 @@ impl HashMapGraph {
         seed: Option<u64>,
         use_min_degree: bool,
     ) -> Option<MinorSafeResult> {
-        let mut new_td = HeuristicEliminationDecomposer::<MinFillSelector>::with_graph(&self)
+        let mut new_td = HeuristicEliminationDecomposer::<MinFillSelector>::with_graph(self)
             .compute()
             .computed_tree_decomposition()
             .unwrap();
@@ -195,7 +190,7 @@ impl HashMapGraph {
         if let Some(result) = self.minor_safe_helper(new_td, max_tries, max_missing, seed) {
             Some(result)
         } else if use_min_degree {
-            let mut new_td = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(&self)
+            let mut new_td = HeuristicEliminationDecomposer::<MinDegreeSelector>::with_graph(self)
                 .compute()
                 .computed_tree_decomposition()
                 .unwrap();
@@ -424,19 +419,16 @@ impl HashMapGraph {
     fn is_minimal_separator(&self, separator: &FxHashSet<usize>) -> bool {
         let components = self.separate(separator);
         components.len() > 1
-            && components
-                .iter()
-                .find(|component| {
-                    separator.iter().any(|v| {
-                        self.data
-                            .get(v)
-                            .unwrap()
-                            .iter()
-                            .find(|u| component.contains(u))
-                            .is_none()
-                    })
+            && !components.iter().any(|component| {
+                separator.iter().any(|v| {
+                    !self
+                        .data
+                        .get(v)
+                        .unwrap()
+                        .iter()
+                        .any(|u| component.contains(u))
                 })
-                .is_none()
+            })
     }
 
     pub fn find_almost_clique_minimal_separator(&self) -> Option<FxHashSet<usize>> {
@@ -549,7 +541,7 @@ impl HashMapGraph {
                 let mut is_clique = true;
                 for v in s.iter() {
                     for u in s.iter().filter(|u| *u > v) {
-                        if !self.data.get(&v).unwrap().contains(&u) {
+                        if !self.data.get(v).unwrap().contains(u) {
                             is_clique = false;
                             break;
                         }
@@ -652,14 +644,14 @@ impl HashMapGraph {
                     return None;
                 }
                 let v_to_count = *vertex_to_count.get(&v).unwrap();
-                let w_to_count = *vertex_to_count.get(&w).unwrap();
+                let w_to_count = *vertex_to_count.get(w).unwrap();
                 vertex_to_count.insert(v, min(v_to_count, w_to_count));
-                if vertex_to_count.get(&w).unwrap() >= discovered.get(&v).unwrap() && u != v {
+                if vertex_to_count.get(w).unwrap() >= discovered.get(&v).unwrap() && u != v {
                     return Some(v);
                 }
-            } else if *w != u && discovered.get(&w).unwrap() < discovered.get(&v).unwrap() {
+            } else if *w != u && discovered.get(w).unwrap() < discovered.get(&v).unwrap() {
                 let v_to_count = *vertex_to_count.get(&v).unwrap();
-                let w_to_count = *discovered.get(&w).unwrap();
+                let w_to_count = *discovered.get(w).unwrap();
                 vertex_to_count.insert(v, min(v_to_count, w_to_count));
             }
         }
@@ -732,13 +724,13 @@ impl MutableGraph for HashMapGraph {
         assert!(self.data.contains_key(&u));
         let nb = self.data.remove(&u).unwrap();
         for i in &nb {
-            self.data.get_mut(&i).unwrap().remove(&u);
+            self.data.get_mut(i).unwrap().remove(&u);
         }
         for i in &nb {
             for j in &nb {
                 if i < j {
-                    self.data.get_mut(&i).unwrap().insert(*j);
-                    self.data.get_mut(&j).unwrap().insert(*i);
+                    self.data.get_mut(i).unwrap().insert(*j);
+                    self.data.get_mut(j).unwrap().insert(*i);
                 }
             }
         }
@@ -789,11 +781,10 @@ impl BaseGraph for HashMapGraph {
 
     fn is_clique(&self, vertices: &[usize]) -> bool {
         for (i, v) in vertices.iter().enumerate() {
-            assert!(self.data.contains_key(&v));
+            assert!(self.data.contains_key(v));
             for u in vertices.iter().skip(i + 1) {
-                assert!(self.data.contains_key(&u));
-                if !self.data.get(&v).unwrap().contains(&u)
-                    || !self.data.get(u).unwrap().contains(v)
+                assert!(self.data.contains_key(u));
+                if !self.data.get(v).unwrap().contains(u) || !self.data.get(u).unwrap().contains(v)
                 {
                     return false;
                 }

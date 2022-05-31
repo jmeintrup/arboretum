@@ -689,13 +689,6 @@ impl SafeSeparatorFramework {
     }
 }
 
-#[derive(Debug, Clone)]
-struct AtomState {
-    graph: HashMapGraph,
-    target_bag: usize,
-    tree_decomposition: Option<TreeDecomposition>,
-}
-
 #[derive(Default, Debug, Clone, Copy)]
 pub struct DecompositionInformation {
     n_separators: usize,

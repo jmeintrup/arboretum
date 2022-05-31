@@ -47,7 +47,7 @@ impl BitGraph {
         for v in c.iter() {
             border.or(&self.graph[v])
         }
-        border.and_not(&c);
+        border.and_not(c);
         border
     }
 }

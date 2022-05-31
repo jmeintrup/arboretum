@@ -57,16 +57,14 @@ impl Hash for BitSet {
 #[inline]
 fn subset_helper(a: &[usize], b: &[usize]) -> bool {
     if a.len() > b.len() {
-        a.iter()
+        !a.iter()
             .zip(b.iter().chain(iter::repeat(&0usize)))
-            .find(|(a, b)| (**a | **b) != **b)
-            .is_none()
+            .any(|(a, b)| (*a | *b) != *b)
     } else {
-        a.iter()
+        !a.iter()
             .chain(iter::repeat(&0usize))
             .zip(b.iter())
-            .find(|(a, b)| (**a | **b) != **b)
-            .is_none()
+            .any(|(a, b)| (*a | *b) != *b)
     }
 }
 
@@ -126,12 +124,12 @@ impl BitSet {
 
     #[inline]
     pub fn is_disjoint_with(&self, other: &BitSet) -> bool {
-        self.bit_vec
+        !self
+            .bit_vec
             .as_slice()
             .iter()
             .zip(other.as_slice().iter())
-            .find(|(x, y)| **x ^ **y != **x | **y)
-            .is_none()
+            .any(|(x, y)| *x ^ *y != *x | *y)
     }
 
     #[inline]
@@ -147,7 +145,7 @@ impl BitSet {
 
     #[inline]
     pub fn is_superset_of(&self, other: &BitSet) -> bool {
-        other.is_subset_of(&self)
+        other.is_subset_of(self)
     }
 
     #[inline]

@@ -147,19 +147,19 @@ impl TamakiPid {
             State::Uninitialized => {
                 self.initialize();
                 self.state = State::Intitial(0);
-                StepResult::Working(self)
+                StepResult::Working(Box::from(self))
             }
             State::Intitial(v) => {
                 if v >= self.graph.order() {
                     self.state = State::IBlockProcessing;
-                    return StepResult::Working(self);
+                    return StepResult::Working(Box::from(self));
                 }
                 let mut closed_neighborhood = self.graph.neighborhood_as_bitset(v).clone();
                 closed_neighborhood.set_bit(v);
 
                 if closed_neighborhood.cardinality() > (self.target_width + 1) as usize {
                     self.state = State::Intitial(v + 1);
-                    return StepResult::Working(self);
+                    return StepResult::Working(Box::from(self));
                 }
 
                 let blocks = separate_into_blocks(
@@ -174,7 +174,7 @@ impl TamakiPid {
                         pmc.endorse(
                             &self.graph,
                             DPHelpers {
-                                cache: &mut &mut self.cache,
+                                cache: &mut self.cache,
                                 ready_queue: &mut self.ready_queue,
                                 pending_endorsers: &mut self.pending_endorsers,
                                 solution: &mut self.solution,
@@ -185,7 +185,7 @@ impl TamakiPid {
                     }
                 }
                 self.state = State::Intitial(v + 1);
-                StepResult::Working(self)
+                StepResult::Working(Box::from(self))
             }
             State::IBlockProcessing => {
                 if let Some(ready) = self.ready_queue.pop_front() {
@@ -206,12 +206,12 @@ impl TamakiPid {
                             self.create_tree_decomposition(),
                         ))
                     } else {
-                        StepResult::Working(self)
+                        StepResult::Working(Box::from(self))
                     }
                 } else {
                     self.state = State::Endorsing;
                     self.endorsers = std::mem::take(&mut self.pending_endorsers);
-                    StepResult::Working(self)
+                    StepResult::Working(Box::from(self))
                 }
             }
             State::Endorsing => {
@@ -234,15 +234,15 @@ impl TamakiPid {
                             self.create_tree_decomposition(),
                         ))
                     } else {
-                        StepResult::Working(self)
+                        StepResult::Working(Box::from(self))
                     }
                 } else if self.ready_queue.is_empty() {
                     self.target_width += 1;
                     self.state = State::Uninitialized;
-                    StepResult::Working(self)
+                    StepResult::Working(Box::from(self))
                 } else {
                     self.state = State::IBlockProcessing;
-                    StepResult::Working(self)
+                    StepResult::Working(Box::from(self))
                 }
             }
         };
@@ -257,7 +257,7 @@ impl TamakiPid {
 }
 
 pub enum StepResult {
-    Working(TamakiPid),
+    Working(Box<TamakiPid>),
     Finished(ComputationResult),
 }
 
@@ -334,7 +334,7 @@ impl AtomSolver for TamakiPid {
 
             match self.step() {
                 StepResult::Working(new_self) => {
-                    self = new_self;
+                    self = *new_self;
                 }
                 StepResult::Finished(result) => {
                     #[cfg(feature = "log")]
@@ -592,7 +592,7 @@ impl Ord for IBlock {
 
 impl PartialOrd for IBlock {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -879,25 +879,17 @@ fn get_or_create_block<'a>(
     graph: &BitGraph,
     block_cache: &'a mut BlockCache,
 ) -> &'a Block {
-    let is_none = block_cache.get(&component).is_none();
+    let is_none = block_cache.get(component).is_none();
     if is_none {
         block_cache.insert(component.clone(), Block::new(component.clone(), graph));
     }
-    block_cache.get(&component).unwrap()
+    block_cache.get(component).unwrap()
 }
 
+#[derive(Default)]
 struct LayeredSieve {
     target_width: u32,
     sieves: Vec<BlockSieve>,
-}
-
-impl Default for LayeredSieve {
-    fn default() -> Self {
-        Self {
-            target_width: 0,
-            sieves: vec![],
-        }
-    }
 }
 
 impl LayeredSieve {

@@ -214,11 +214,9 @@ impl TreeDecomposition {
                 .insert(neighbor_of_target_bag.id);
 
             assert!(neighbor_of_target_bag.neighbors.remove(&target_bag));
-            assert!(
-                neighbor_of_target_bag
-                    .neighbors
-                    .insert(new_neighbor_of_neighbor_of_target_bag.id)
-            );
+            assert!(neighbor_of_target_bag
+                .neighbors
+                .insert(new_neighbor_of_neighbor_of_target_bag.id));
         }
         self.bags.extend_from_slice(&td.bags);
         let old_idx = self.bags.len() - 1;
