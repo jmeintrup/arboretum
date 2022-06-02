@@ -58,7 +58,7 @@ OPTIONS:
 # The Library
 ## Usage
 
-Simply add **arboretum** to your projects `cargo.toml` under dependencies and get started. For documentation refer to the [docs.rs](https://docs.rs/arboretum).
+Simply add **arboretum-td** to your projects `cargo.toml` under dependencies and get started. For documentation refer to the [docs.rs](https://docs.rs/arboretum-td).
 
 # References
 

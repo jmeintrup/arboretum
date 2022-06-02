@@ -1,6 +1,6 @@
-use arboretum::graph::HashMapGraph;
-use arboretum::io::{PaceReader, PaceWriter};
-use arboretum::solver::{AlgorithmTypes, AtomSolverType, Solver};
+use arboretum_td::graph::HashMapGraph;
+use arboretum_td::io::{PaceReader, PaceWriter};
+use arboretum_td::solver::{AlgorithmTypes, AtomSolverType, Solver};
 use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -11,7 +11,7 @@ use structopt::StructOpt;
 #[cfg(log)]
 use log::info;
 
-use arboretum::SafeSeparatorLimits;
+use arboretum_td::SafeSeparatorLimits;
 #[cfg(feature = "jemallocator")]
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
@@ -67,7 +67,7 @@ fn main() -> io::Result<()> {
 
     #[cfg(feature = "log")]
     #[cfg(feature = "env_logger")]
-    arboretum::log::build_pace_logger();
+    arboretum_td::log::build_pace_logger();
 
     let graph: HashMapGraph = match opt.input {
         Some(path) => {
@@ -90,12 +90,12 @@ fn main() -> io::Result<()> {
     let td = match mode {
         "heuristic" => {
             #[cfg(feature = "handle-ctrlc")]
-            arboretum::signals::initialize();
+            arboretum_td::signals::initialize();
 
             let timeout: Option<u64> = opt.timeout;
             let use_timeout = timeout.is_some();
             if let Some(timeout) = timeout {
-                arboretum::timeout::initialize_timeout(timeout);
+                arboretum_td::timeout::initialize_timeout(timeout);
             }
 
             if use_timeout {
@@ -129,7 +129,7 @@ fn main() -> io::Result<()> {
             #[cfg(log)]
             info!("Running in default auto mode.");
             #[cfg(feature = "handle-ctrlc")]
-            arboretum::signals::initialize();
+            arboretum_td::signals::initialize();
 
             let timeout: Option<u64> = opt.timeout;
             let use_timeout = timeout.is_some();
@@ -137,7 +137,7 @@ fn main() -> io::Result<()> {
                 #[cfg(log)]
                 info!("Initializing a timeout for {} seconds.", timeout);
 
-                arboretum::timeout::initialize_timeout(timeout);
+                arboretum_td::timeout::initialize_timeout(timeout);
             }
 
             let mut td = Solver::auto(&graph)
@@ -146,7 +146,7 @@ fn main() -> io::Result<()> {
                 )
                 .seed(opt.seed)
                 .solve(&graph);
-            if use_timeout && !arboretum::timeout::timeout() {
+            if use_timeout && !arboretum_td::timeout::timeout() {
                 let td2 = Solver::default_heuristic()
                     .algorithm_types(
                         AlgorithmTypes::default()

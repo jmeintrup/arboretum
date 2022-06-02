@@ -1,5 +1,5 @@
 [package]
-name = "arboretum"
+name = "arboretum-td"
 version = "0.1.0"
 authors = ["Johannes Meintrup <johannes.meintrup@mni.thm.de>"]
 edition = "2018"
