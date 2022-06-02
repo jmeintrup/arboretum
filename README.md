@@ -43,7 +43,7 @@ FLAGS:
 
 OPTIONS:
     -m, --mode <mode>          Mode. 'heuristic', 'exact' or 'auto'. Defaults to Exact. Any invalid input fails silently
-                               to 'heuristic'
+                               to 'exact'
     -s, --seed <seed>          Seed used for all rng. Unsigned 64bit integer value. Defaults to '0' if missing
     -t, --timeout <timeout>    Optional timeout value for heuristic algorithm. In heuristic mode the CLI stops on ctrl+c
                                and outputs the current best solution. This might take a few seconds or minutes depending
