@@ -21,14 +21,21 @@ structopt = { version = "0.3.21", optional = true }
 jemallocator = { version = "0.3.2", optional = true }
 env_logger = { version = "0.8.3", optional = true }
 ctrlc = { version = "3.1.9", optional = true, features = ["termination"] }
+rmp-serde = "1.3.0"
+serde = { version = "1.0.217", features = ["derive"] }
 
 [features]
-handle-ctrlc=["ctrlc"]
-pace-logging=["log", "env_logger"]
+handle-ctrlc = ["ctrlc"]
+pace-logging = ["log", "env_logger"]
 cli = ["structopt"]
 
 [[bin]]
 name = "arboretum-cli"
 path = "src/main.rs"
 required-features = ["cli"]
+test = false
+
+[[bin]]
+name = "test-ml"
+path = "src/test-ml.rs"
 test = false

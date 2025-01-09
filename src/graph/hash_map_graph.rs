@@ -9,6 +9,8 @@ use fxhash::FxHashMap;
 use fxhash::FxHashSet;
 use rand::prelude::{SliceRandom, StdRng};
 use rand::{Rng, SeedableRng};
+use rmp_serde::encode;
+use serde::{Deserialize, Serialize};
 use std::cmp::{max, min, Ordering};
 use std::collections::VecDeque;
 
@@ -16,7 +18,7 @@ use std::collections::VecDeque;
 use crate::signals::received_ctrl_c;
 use crate::solver::AtomSolver;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HashMapGraph {
     data: FxHashMap<usize, FxHashSet<usize>>,
 }
@@ -35,6 +37,10 @@ pub struct MinorSafeResult {
 }
 
 impl HashMapGraph {
+    pub fn serialize(&self) -> Vec<u8> {
+        encode::to_vec(self).expect("Failed to serialize graph")
+    }
+
     pub fn has_vertex(&self, u: usize) -> bool {
         self.data.contains_key(&u)
     }
