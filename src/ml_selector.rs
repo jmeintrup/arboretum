@@ -4,20 +4,30 @@ use arboretum_td::heuristic_elimination_order::{
 };
 use arboretum_td::solver::AtomSolver;
 use arboretum_td::{graph::HashMapGraph, io::PaceReader};
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::io::BufWriter;
+use std::io::Write;
+use std::net::TcpStream;
+use std::sync::Mutex;
 use std::time::Instant;
 use std::{
     convert::TryFrom,
     fs::File,
     io::{self, BufReader, Read},
-    path::Path,
 };
-use std::{
-    io::Write,
-    process::{Command, Stdio},
-};
+
+lazy_static! {
+    static ref GLOBAL_TCP_STREAM: Mutex<Option<TcpStream>> = Mutex::new(None);
+}
+
+const END_MARKER: &[u8] = b"<END>";
+
+fn set_global_connection(address: &str) {
+    let stream = TcpStream::connect(address).expect("Failed to connect to the server");
+    let mut global_stream = GLOBAL_TCP_STREAM.lock().unwrap();
+    *global_stream = Some(stream);
+}
 
 pub struct MLSelector {
     graph: HashMapGraph,
@@ -63,6 +73,8 @@ struct Tuple(i64, i64);
 pub type MLDecomposer = HeuristicEliminationDecomposer<MLSelector>;
 
 fn main() -> io::Result<()> {
+    set_global_connection("127.0.0.1:5001");
+
     let file = File::create("output.csv")?;
     let buf_writer = BufWriter::new(file);
 
@@ -172,42 +184,64 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn ml_values(graph: &HashMapGraph, cache: &mut [i64]) -> io::Result<()> {
-    let mut child = Command::new("uv")
-        .arg("run")
-        .arg("--directory")
-        .arg("/home/mhbr96/Python/tw_bnb/") // change this to correct path
-        .arg("deserialize_msgpack.py")
-        .stdin(Stdio::piped()) // write to stdin
-        .stdout(Stdio::piped()) // read from stdout
-        .spawn()
-        .expect("Failed to start Python process");
+fn read_until_marker(mut stream: &mut TcpStream) -> Vec<u8> {
+    let mut reader = BufReader::new(&mut stream);
+    let mut buffer = Vec::new();
+    let mut chunk = [0; 4096];
 
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(&graph.serialize())?; // Write serialized graph data to stdin
-        stdin.flush()?;
-    }
-
-    let mut output = Vec::new();
-    if let Some(ref mut stdout) = child.stdout {
-        stdout.read_to_end(&mut output)?; // Read all data from stdout
-    }
-
-    let results: Vec<Tuple> = rmp_serde::from_slice(&output).expect("Failed to deserialize output");
-
-    let status = child
-        .wait()
-        .expect("Failed to wait for Python process to exit");
-
-    if status.success() {
-        for t in results.iter().cloned() {
-            cache[t.0 as usize] = t.1
+    loop {
+        let bytes_read = reader.read(&mut chunk).unwrap();
+        if bytes_read == 0 {
+            break;
         }
+
+        // Append the read data into the main buffer
+        buffer.extend_from_slice(&chunk[..bytes_read]);
+
+        // Check if the end marker exists in the buffer
+        if buffer
+            .windows(END_MARKER.len())
+            .any(|window| window == END_MARKER)
+        {
+            // Remove the end marker from the data
+            let marker_pos = buffer
+                .windows(END_MARKER.len())
+                .position(|window| window == END_MARKER)
+                .unwrap();
+            buffer.truncate(marker_pos);
+            break;
+        }
+    }
+
+    buffer // Return the message buffer without the end marker
+}
+
+fn ml_values(graph: &HashMapGraph, cache: &mut [i64]) -> io::Result<()> {
+    let mut global_stream = GLOBAL_TCP_STREAM.lock().unwrap();
+    if let Some(ref mut stream) = *global_stream {
+        let mut serialized_graph = graph.serialize();
+        serialized_graph.extend_from_slice(END_MARKER);
+
+        stream.write_all(&serialized_graph)?;
+        stream.flush()?;
+
+        let output = read_until_marker(stream);
+        // let mut output = Vec::new();
+        // stream.read_to_end(&mut output)?;
+
+        let results: Vec<Tuple> = rmp_serde::from_slice(&output).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "Failed to deserialize output")
+        })?;
+
+        for t in results {
+            cache[t.0 as usize] = t.1;
+        }
+
         Ok(())
     } else {
         Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Python program failed",
+            io::ErrorKind::NotConnected,
+            "No global TCP stream available",
         ))
     }
 }

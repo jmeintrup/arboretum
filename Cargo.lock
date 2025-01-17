@@ -30,6 +30,7 @@ dependencies = [
  "env_logger",
  "fxhash",
  "jemallocator",
+ "lazy_static",
  "log",
  "num",
  "rand",
