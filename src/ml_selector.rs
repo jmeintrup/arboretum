@@ -4,8 +4,10 @@ use arboretum_td::heuristic_elimination_order::{
 };
 use arboretum_td::solver::AtomSolver;
 use arboretum_td::{graph::HashMapGraph, io::PaceReader};
+use fxhash::FxHashMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::Entry;
 use std::io::BufWriter;
 use std::io::Write;
 use std::net::TcpStream;
@@ -110,33 +112,33 @@ fn main() -> io::Result<()> {
                         let reader = PaceReader(BufReader::new(file));
                         let graph = HashMapGraph::try_from(reader)?;
 
-                        let now = Instant::now();
-                        let decomposer: HeuristicEliminationDecomposer<MinDegreeSelector> =
-                            HeuristicEliminationDecomposer::with_bounds(&graph, 0, graph.order());
-                        let x = decomposer.compute().computed_tree_decomposition();
-                        if let Some(decomposition_mindegree) = x {
-                            let elapsed = now.elapsed();
-                            println!(
-                                "Min Degree: {:?}: {:?}",
-                                decomposition_mindegree.max_bag_size, elapsed
-                            );
-                            mindegree = decomposition_mindegree.max_bag_size;
-                            elapsed_mindegree = elapsed.as_millis();
-                        }
+                        // let now = Instant::now();
+                        // let decomposer: HeuristicEliminationDecomposer<MinDegreeSelector> =
+                        //     HeuristicEliminationDecomposer::with_bounds(&graph, 0, graph.order());
+                        // let x = decomposer.compute().computed_tree_decomposition();
+                        // if let Some(decomposition_mindegree) = x {
+                        //     let elapsed = now.elapsed();
+                        //     println!(
+                        //         "Min Degree: {:?}: {:?}",
+                        //         decomposition_mindegree.max_bag_size, elapsed
+                        //     );
+                        //     mindegree = decomposition_mindegree.max_bag_size;
+                        //     elapsed_mindegree = elapsed.as_millis();
+                        // }
 
-                        let now = Instant::now();
-                        let decomposer: HeuristicEliminationDecomposer<MinFillSelector> =
-                            HeuristicEliminationDecomposer::with_bounds(&graph, 0, graph.order());
-                        let x = decomposer.compute().computed_tree_decomposition();
-                        if let Some(decomposition_minfill) = x {
-                            let elapsed = now.elapsed();
-                            println!(
-                                "Min Fill: {:?}: {:?}",
-                                decomposition_minfill.max_bag_size, elapsed
-                            );
-                            minfill = decomposition_minfill.max_bag_size;
-                            elapsed_minfill = elapsed.as_millis()
-                        }
+                        // let now = Instant::now();
+                        // let decomposer: HeuristicEliminationDecomposer<MinFillSelector> =
+                        //     HeuristicEliminationDecomposer::with_bounds(&graph, 0, graph.order());
+                        // let x = decomposer.compute().computed_tree_decomposition();
+                        // if let Some(decomposition_minfill) = x {
+                        //     let elapsed = now.elapsed();
+                        //     println!(
+                        //         "Min Fill: {:?}: {:?}",
+                        //         decomposition_minfill.max_bag_size, elapsed
+                        //     );
+                        //     minfill = decomposition_minfill.max_bag_size;
+                        //     elapsed_minfill = elapsed.as_millis()
+                        // }
 
                         let now = Instant::now();
                         let decomposer: HeuristicEliminationDecomposer<MLSelector> =

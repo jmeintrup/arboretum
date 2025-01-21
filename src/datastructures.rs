@@ -549,6 +549,134 @@ impl BinaryQueue {
     }
 }
 
+pub struct TWBinaryQueue {
+    heap: Vec<usize>,
+    values: FxHashMap<usize, f64>,
+    indices: FxHashMap<usize, usize>,
+    epsilon: f64,
+    c: f64,
+}
+
+impl TWBinaryQueue {
+    pub fn new(epsilon: f64, c: f64) -> Self {
+        Self {
+            heap: Vec::default(),
+            values: FxHashMap::default(),
+            indices: FxHashMap::default(),
+            epsilon,
+            c,
+        }
+    }
+
+    fn pfunc(&self, tw: i64, depth: usize) -> f64 {
+        (tw as f64) - self.epsilon * (depth as f64).powf(self.c)
+    }
+
+    pub fn insert(&mut self, element: usize, tw: i64, depth: usize) {
+        let priority = self.pfunc(tw, depth);
+        match self.values.entry(element) {
+            Entry::Occupied(_) => self.update(element, tw, depth),
+            Entry::Vacant(entry) => {
+                entry.insert(priority);
+                self.indices.insert(element, self.heap.len());
+                self.heap.push(element);
+                if self.heap.len() > 1 {
+                    self.up(self.heap.len() - 1);
+                }
+            }
+        }
+    }
+
+    fn update(&mut self, k: usize, tw: i64, depth: usize) {
+        let priority = self.pfunc(tw, depth);
+        *self.values.get_mut(&k).unwrap() = priority;
+        self.up(*self.indices.get(&k).unwrap());
+        self.down(*self.indices.get(&k).unwrap());
+    }
+
+    pub fn pop_min(&mut self) -> Option<(usize, f64)> {
+        if !self.heap.is_empty() {
+            let k = self.heap[0];
+            let v = *self.values.get(&k).unwrap();
+            self.heap[0] = *self.heap.last().unwrap();
+            *self.indices.get_mut(&self.heap[0]).unwrap() = 0;
+            self.heap.pop();
+            if self.heap.len() > 1 {
+                self.down(0);
+            }
+            return Some((k, v));
+        }
+        None
+    }
+
+    fn up(&mut self, mut idx: usize) {
+        let x = self.heap[idx];
+        let mut parent = self.parent(idx);
+
+        loop {
+            if parent.is_some()
+                && idx > 0
+                && self.values.get(&x) < self.values.get(&self.heap[parent.unwrap()])
+            {
+                let p = parent.unwrap();
+                self.heap[idx] = self.heap[p];
+                self.indices.insert(self.heap[p], idx);
+                idx = p;
+                parent = self.parent(idx);
+            } else {
+                break;
+            }
+        }
+        self.heap[idx] = x;
+        self.indices.insert(x, idx);
+    }
+
+    fn down(&mut self, idx: usize) {
+        let mut current = idx;
+        let value = self.heap[current];
+
+        while let Some(mut first) = self.child(current, ChildType::First) {
+            if let Some(second) = self.child(current, ChildType::Second) {
+                let v1 = self.values.get(&self.heap[second]).unwrap();
+                let v2 = self.values.get(&self.heap[first]).unwrap();
+                if v1 < v2 {
+                    first = second;
+                }
+            }
+            if self.values.get(&self.heap[first]) < self.values.get(&value) {
+                self.heap[current] = self.heap[first];
+                *self.indices.get_mut(&self.heap[current]).unwrap() = current;
+                current = first
+            } else {
+                break;
+            }
+        }
+        self.heap[current] = value;
+        *self.indices.get_mut(&value).unwrap() = current
+    }
+
+    fn parent(&self, idx: usize) -> Option<usize> {
+        if idx == 0 {
+            None
+        } else {
+            Some((idx - 1) / 2)
+        }
+    }
+
+    fn child(&self, idx: usize, child_type: ChildType) -> Option<usize> {
+        let off = match child_type {
+            ChildType::First => 1,
+            ChildType::Second => 2,
+        };
+        let idx = idx * 2 + off;
+        if idx >= self.heap.len() {
+            None
+        } else {
+            Some(idx)
+        }
+    }
+}
+
 struct Wrapper<T>(Rc<RefCell<FxHashSet<T>>>);
 
 impl<T> PartialEq for Wrapper<T>

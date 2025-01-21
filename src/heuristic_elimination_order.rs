@@ -1,4 +1,5 @@
 use crate::datastructures::BinaryQueue;
+use crate::datastructures::TWBinaryQueue;
 use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
@@ -376,6 +377,81 @@ impl<S: Selector> HeuristicEliminationDecomposer<S> {
             eliminated_in_bag,
         })
     }
+    pub fn compute_order_and_decomposition2(self) -> Option<PermutationDecompositionResult> {
+        #[cfg(feature = "log")]
+        info!("computing heuristic elimination td");
+        let mut selector = self.selector;
+        let mut permutation: Vec<usize> = vec![];
+        let upperbound = self.upperbound;
+        let lowerbound = self.lowerbound;
+        let mut tree_decomposition = TreeDecomposition::default();
+        let mut eliminated_in_bag: FxHashMap<usize, usize> = FxHashMap::default();
+        let orig_size = selector.graph().order();
+
+        if selector.graph().order() > self.lowerbound + 1 {
+            let mut max_bag = 2;
+            let mut pq = TWBinaryQueue::new(1.0, 0.75);
+            for v in selector.graph().vertices() {
+                pq.insert(v, selector.value(v), orig_size - selector.graph().order())
+            }
+            while let Some((u, _)) = pq.pop_min() {
+                if selector.graph().order() <= max_bag || selector.graph().order() <= lowerbound + 1
+                {
+                    break;
+                }
+
+                #[cfg(feature = "handle-ctrlc")]
+                if crate::signals::received_ctrl_c() {
+                    // unknown lowerbound
+                    #[cfg(feature = "log")]
+                    info!("breaking heuristic elimination td due to ctrl+c");
+                    break;
+                }
+
+                #[cfg(feature = "cli")]
+                if crate::timeout::timeout() {
+                    // unknown lowerbound
+                    #[cfg(feature = "log")]
+                    info!("breaking heuristic elimination td due to timeout!");
+                    break;
+                }
+
+                if selector.graph().degree(u) > upperbound {
+                    return None;
+                }
+
+                let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
+                max_bag = max(max_bag, nb.len() + 1);
+                permutation.push(u);
+                let mut bag = nb.clone();
+                bag.insert(u);
+                eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
+                selector.eliminate_vertex(u);
+                for u in selector.graph().vertices() {
+                    pq.insert(u, selector.value(u), orig_size - selector.graph().order())
+                }
+            }
+        }
+
+        // remaining vertices, arbitrary order
+        while selector.graph().order() > 0 {
+            let u = selector.graph().vertices().next().unwrap();
+            let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
+            permutation.push(u);
+            let mut bag = nb.clone();
+            bag.insert(u);
+            eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
+            selector.eliminate_vertex(u);
+        }
+
+        permutation_td_connect_helper(&mut tree_decomposition, &permutation, &eliminated_in_bag);
+
+        Some(PermutationDecompositionResult {
+            permutation,
+            tree_decomposition,
+            eliminated_in_bag,
+        })
+    }
 }
 
 pub struct PermutationDecompositionResult {
@@ -410,7 +486,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             lowerbound: self.lowerbound,
             upperbound: self.upperbound,
         };
-        match self.compute_order_and_decomposition() {
+        match self.compute_order_and_decomposition2() {
             None => ComputationResult::Bounds(bounds),
             Some(result) => ComputationResult::ComputedTreeDecomposition(result.tree_decomposition),
         }
