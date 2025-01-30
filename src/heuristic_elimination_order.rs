@@ -78,6 +78,64 @@ impl Selector for MinDegreeSelector {
     }
 }
 
+pub struct PureMLSelector {
+    graph: HashMapGraph,
+    cache: Vec<i64>,
+    stream: UnixStream,
+}
+
+impl From<HashMapGraph> for PureMLSelector {
+    fn from(graph: HashMapGraph) -> Self {
+        let socket_path = get_socket_path();
+        let stream = UnixStream::connect(socket_path).expect("Failed to connect to the server");
+
+        let mut ml_selector = Self {
+            cache: vec![0; graph.order()],
+            graph,
+            stream,
+        };
+
+        ml_selector.update_cache();
+        ml_selector
+    }
+}
+
+impl PureMLSelector {
+    fn update_cache(&mut self) {
+        let stream = &mut self.stream;
+
+        let mut serialized_graph = self.graph.serialize();
+        serialized_graph.extend_from_slice(END_MARKER);
+
+        stream.write_all(&serialized_graph).unwrap();
+        stream.flush().unwrap();
+
+        let output = read_until_marker(stream);
+        let results: Vec<(i64, i64)> = rmp_serde::from_slice(&output)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Failed to deserialize output"))
+            .unwrap();
+
+        for (vertex, value) in results {
+            self.cache[vertex as usize] = value;
+        }
+    }
+}
+
+impl Selector for PureMLSelector {
+    fn graph(&self) -> &HashMapGraph {
+        &self.graph
+    }
+
+    fn value(&self, v: usize) -> i64 {
+        self.cache[v]
+    }
+
+    fn eliminate_vertex(&mut self, v: usize) {
+        self.graph.eliminate_vertex(v);
+        self.update_cache();
+    }
+}
+
 pub struct DegreeMLSelector {
     min_degree: usize,
     graph: HashMapGraph,
@@ -159,7 +217,11 @@ impl From<HashMapGraph> for FillMLSelector {
         let socket_path = get_socket_path();
         let stream = UnixStream::connect(socket_path).expect("Failed to connect to the server");
         let ml_cache = vec![0; graph.order()];
-        let min_minfill = 0 as usize;
+        let min_minfill = graph
+            .vertices()
+            .map(|u| graph.fill_in_count(u))
+            .min()
+            .unwrap();
 
         let mut cache = FxHashMap::with_capacity_and_hasher(graph.order(), Default::default());
         for u in graph.vertices() {
@@ -179,13 +241,39 @@ impl From<HashMapGraph> for FillMLSelector {
                     })
             }
         }
-        Self {
+        let mut ml_selector = Self {
             min_minfill,
             graph,
             cache,
             ml_cache,
             stream,
+        };
+        ml_selector.update_cache();
+        ml_selector
+    }
+}
+
+impl Selector for FillMLSelector {
+    fn graph(&self) -> &HashMapGraph {
+        &self.graph
+    }
+
+    fn value(&self, v: usize) -> i64 {
+        if self.graph.fill_in_count(v) > self.min_minfill {
+            return 60_000;
         }
+        self.ml_cache[v]
+    }
+
+    fn eliminate_vertex(&mut self, v: usize) {
+        self.eliminate_with_info(v);
+        self.update_cache();
+        self.min_minfill = self
+            .graph
+            .vertices()
+            .map(|u| self.graph.fill_in_count(u))
+            .min()
+            .unwrap_or(0);
     }
 }
 
@@ -313,30 +401,6 @@ impl FillMLSelector {
         for u in fill_info.neighborhood {
             self.add_edge(u, fill_info.eliminated_vertex);
         }
-    }
-}
-
-impl Selector for FillMLSelector {
-    fn graph(&self) -> &HashMapGraph {
-        &self.graph
-    }
-
-    fn value(&self, v: usize) -> i64 {
-        if self.graph.degree(v) > self.min_minfill {
-            return 60_000;
-        }
-        self.ml_cache[v]
-    }
-
-    fn eliminate_vertex(&mut self, v: usize) {
-        self.graph.eliminate_vertex(v);
-        self.update_cache();
-        self.min_minfill = self
-            .graph
-            .vertices()
-            .map(|u| self.graph.degree(u))
-            .min()
-            .unwrap_or(0);
     }
 }
 
@@ -509,6 +573,7 @@ pub type MinFillDegree = HeuristicEliminationDecomposer<MinFillDegreeSelector>;
 
 pub type MinDegreeMLSelector = HeuristicEliminationDecomposer<DegreeMLSelector>;
 pub type MinFillMLSelector = HeuristicEliminationDecomposer<MinFillDegreeSelector>;
+pub type MinPureMLSelector = HeuristicEliminationDecomposer<PureMLSelector>;
 
 pub struct HeuristicEliminationDecomposer<S: Selector> {
     selector: S,

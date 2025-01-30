@@ -43,6 +43,8 @@ fn main() -> io::Result<()> {
     let mut elapsed_ml_md = 0;
     let mut ml_mf = 0;
     let mut elapsed_ml_mf = 0;
+    let mut ml = 0;
+    let mut elapsed_ml = 0;
 
     let file = std::fs::File::open(path).unwrap();
     let reader = PaceReader(BufReader::new(file));
@@ -91,16 +93,30 @@ fn main() -> io::Result<()> {
         elapsed_ml_mf = elapsed.as_nanos()
     }
 
+    let now = Instant::now();
+    let decomposer: MinFillMLSelector =
+        HeuristicEliminationDecomposer::with_bounds(&graph, lb, graph.order());
+
+    let x = decomposer.compute_order_and_decomposition();
+    if let Some(decomposition_ml) = x {
+        let elapsed = now.elapsed();
+        ml = decomposition_ml.tree_decomposition.max_bag_size;
+        elapsed_ml = elapsed.as_nanos()
+    }
+
     let data = serde_json::json!({
-        "mindegree": mindegree,
-        "elapsed_mindegree": elapsed_mindegree,
-        "minfill": minfill,
-        "elapsed_minfill": elapsed_minfill,
-        "ml_md": ml_md,
-        "elapsed_ml_md": elapsed_ml_md,
-        "ml_mf": ml_mf,
-        "elapsed_ml_mf": elapsed_ml_mf,
+    "mindegree": mindegree,
+    "elapsed_mindegree": elapsed_mindegree,
+    "minfill": minfill,
+    "elapsed_minfill": elapsed_minfill,
+    "ml_md": ml_md,
+    "elapsed_ml_md": elapsed_ml_md,
+    "ml_mf": ml_mf,
+    "elapsed_ml_mf": elapsed_ml_mf,
+    "ml": ml,
+    "elapsed_ml": elapsed_ml,
     });
+
     println!("{}", data);
 
     Ok(())
