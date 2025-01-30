@@ -3,12 +3,30 @@ use crate::datastructures::TWBinaryQueue;
 use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
+use crate::io::read_until_marker;
+use crate::io::END_MARKER;
 use crate::solver::{AtomSolver, Bounds, ComputationResult};
 use crate::tree_decomposition::TreeDecomposition;
 use fxhash::{FxHashMap, FxHashSet};
 #[cfg(feature = "log")]
 use log::info;
+use once_cell::sync::OnceCell;
 use std::cmp::max;
+use std::io;
+use std::io::Write;
+use std::os::unix::net::UnixStream;
+
+pub static SOCKET_PATH: OnceCell<String> = OnceCell::new();
+
+pub fn set_socket_path(path: &str) {
+    SOCKET_PATH
+        .set(path.to_string())
+        .expect("Socket path is already set");
+}
+
+pub fn get_socket_path() -> &'static str {
+    SOCKET_PATH.get().expect("Socket path is not set")
+}
 
 pub struct MinFillDegreeSelector {
     inner: MinFillSelector,
@@ -57,6 +75,268 @@ impl Selector for MinDegreeSelector {
 
     fn eliminate_vertex(&mut self, v: usize) {
         self.graph.eliminate_vertex(v);
+    }
+}
+
+pub struct DegreeMLSelector {
+    min_degree: usize,
+    graph: HashMapGraph,
+    cache: Vec<i64>,
+    stream: UnixStream,
+}
+impl From<HashMapGraph> for DegreeMLSelector {
+    fn from(graph: HashMapGraph) -> Self {
+        let socket_path = get_socket_path();
+        let stream = UnixStream::connect(socket_path).expect("Failed to connect to the server");
+
+        let mut ml_selector = Self {
+            min_degree: graph.vertices().map(|u| graph.degree(u)).min().unwrap(),
+            cache: vec![0; graph.order()],
+            graph,
+            stream,
+        };
+
+        ml_selector.update_cache();
+        ml_selector
+    }
+}
+
+impl DegreeMLSelector {
+    fn update_cache(&mut self) {
+        let stream = &mut self.stream;
+
+        let mut serialized_graph = self.graph.serialize();
+        serialized_graph.extend_from_slice(END_MARKER);
+
+        stream.write_all(&serialized_graph).unwrap();
+        stream.flush().unwrap();
+
+        let output = read_until_marker(stream);
+        let results: Vec<(i64, i64)> = rmp_serde::from_slice(&output)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Failed to deserialize output"))
+            .unwrap();
+
+        for (vertex, value) in results {
+            self.cache[vertex as usize] = value;
+        }
+    }
+}
+
+impl Selector for DegreeMLSelector {
+    fn graph(&self) -> &HashMapGraph {
+        &self.graph
+    }
+
+    fn value(&self, v: usize) -> i64 {
+        if self.graph.degree(v) > self.min_degree {
+            return 60_000;
+        }
+        self.cache[v]
+    }
+
+    fn eliminate_vertex(&mut self, v: usize) {
+        self.graph.eliminate_vertex(v);
+        self.update_cache();
+        self.min_degree = self
+            .graph
+            .vertices()
+            .map(|u| self.graph.degree(u))
+            .min()
+            .unwrap_or(0);
+    }
+}
+
+pub struct FillMLSelector {
+    min_minfill: usize,
+    graph: HashMapGraph,
+    cache: FxHashMap<usize, usize>,
+    ml_cache: Vec<i64>,
+    stream: UnixStream,
+}
+
+impl From<HashMapGraph> for FillMLSelector {
+    fn from(graph: HashMapGraph) -> Self {
+        let socket_path = get_socket_path();
+        let stream = UnixStream::connect(socket_path).expect("Failed to connect to the server");
+        let ml_cache = vec![0; graph.order()];
+        let min_minfill = 0 as usize;
+
+        let mut cache = FxHashMap::with_capacity_and_hasher(graph.order(), Default::default());
+        for u in graph.vertices() {
+            cache.insert(u, 0);
+        }
+        for u in graph.vertices() {
+            for v in graph.vertices().filter(|v| u < *v && graph.has_edge(u, *v)) {
+                graph
+                    .neighborhood_set(u)
+                    .iter()
+                    .copied()
+                    .filter(|x| v < *x && graph.has_edge(*x, v))
+                    .for_each(|x| {
+                        *cache.get_mut(&x).unwrap() += 1;
+                        *cache.get_mut(&u).unwrap() += 1;
+                        *cache.get_mut(&v).unwrap() += 1;
+                    })
+            }
+        }
+        Self {
+            min_minfill,
+            graph,
+            cache,
+            ml_cache,
+            stream,
+        }
+    }
+}
+
+impl FillMLSelector {
+    fn update_cache(&mut self) {
+        let stream = &mut self.stream;
+
+        let mut serialized_graph = self.graph.serialize();
+        serialized_graph.extend_from_slice(END_MARKER);
+
+        stream.write_all(&serialized_graph).unwrap();
+        stream.flush().unwrap();
+
+        let output = read_until_marker(stream);
+        let results: Vec<(i64, i64)> = rmp_serde::from_slice(&output)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Failed to deserialize output"))
+            .unwrap();
+
+        for (vertex, value) in results {
+            self.ml_cache[vertex as usize] = value;
+        }
+    }
+
+    pub(crate) fn add_edge(&mut self, u: usize, v: usize) {
+        self.graph.add_edge(u, v);
+        for x in self.graph.neighborhood_set(u) {
+            if self.graph.has_edge(*x, v) {
+                *self.cache.get_mut(x).unwrap() += 1;
+                *self.cache.get_mut(&u).unwrap() += 1;
+                *self.cache.get_mut(&v).unwrap() += 1;
+            }
+        }
+    }
+
+    pub(crate) fn add_edges<'a, T: IntoIterator<Item = &'a (usize, usize)>>(&mut self, iter: T) {
+        for (u, v) in iter {
+            self.add_edge(*u, *v);
+        }
+    }
+
+    pub(crate) fn remove_edges<'a, T: IntoIterator<Item = &'a (usize, usize)>>(&mut self, iter: T) {
+        for (u, v) in iter {
+            self.remove_edge(*u, *v);
+        }
+    }
+
+    fn remove_vertex(&mut self, u: usize) {
+        for v in self.graph.neighborhood_set(u).clone() {
+            self.remove_edge(u, v);
+        }
+        self.graph.remove_vertex(u);
+        self.cache.remove(&u);
+    }
+
+    pub(crate) fn remove_edge(&mut self, u: usize, v: usize) {
+        self.graph.remove_edge(u, v);
+
+        for x in self.graph.neighborhood_set(u) {
+            if self.graph.has_edge(*x, v) {
+                *self.cache.get_mut(x).unwrap() -= 1;
+                *self.cache.get_mut(&u).unwrap() -= 1;
+                *self.cache.get_mut(&v).unwrap() -= 1;
+            }
+        }
+    }
+
+    fn eliminate_fill0(&mut self, u: usize) -> FillInfo {
+        if self.graph.degree(u) > 1 {
+            let delta = self.graph.degree(u) - 1;
+            let graph = &self.graph;
+            let cache = &mut self.cache;
+            graph.neighborhood_set(u).iter().copied().for_each(|v| {
+                *cache.get_mut(&v).unwrap() -= delta;
+            });
+        }
+        let neighborhood = self.graph.neighborhood_set(u).clone();
+        self.graph.remove_vertex(u);
+        FillInfo {
+            added_edges: vec![],
+            neighborhood,
+            eliminated_vertex: u,
+        }
+    }
+
+    pub(crate) fn fill_in_count(&self, u: usize) -> usize {
+        let deg = self.graph.degree(u);
+        (deg * deg - deg) / 2 - self.cache.get(&u).unwrap()
+    }
+
+    pub(crate) fn eliminate_with_info(&mut self, v: usize) -> FillInfo {
+        if self.fill_in_count(v) == 0 {
+            self.eliminate_fill0(v)
+        } else {
+            let neighborhood = self.graph.neighborhood_set(v).clone();
+            let mut added_edges: Vec<(usize, usize)> = vec![];
+            for u in self.graph.neighborhood_set(v) {
+                for w in self
+                    .graph
+                    .neighborhood_set(v)
+                    .iter()
+                    .filter(|w| u < *w && !self.graph.has_edge(*u, **w))
+                {
+                    added_edges.push((*u, *w));
+                }
+            }
+            for (u, w) in &added_edges {
+                self.add_edge(*u, *w);
+            }
+            self.remove_vertex(v);
+            FillInfo {
+                added_edges,
+                neighborhood,
+                eliminated_vertex: v,
+            }
+        }
+    }
+
+    pub(crate) fn undo_elimination(&mut self, fill_info: FillInfo) {
+        for (u, v) in fill_info.added_edges {
+            self.add_edge(u, v);
+        }
+        self.graph.add_vertex(fill_info.eliminated_vertex);
+        self.cache
+            .insert(fill_info.eliminated_vertex, Default::default());
+        for u in fill_info.neighborhood {
+            self.add_edge(u, fill_info.eliminated_vertex);
+        }
+    }
+}
+
+impl Selector for FillMLSelector {
+    fn graph(&self) -> &HashMapGraph {
+        &self.graph
+    }
+
+    fn value(&self, v: usize) -> i64 {
+        if self.graph.degree(v) > self.min_minfill {
+            return 60_000;
+        }
+        self.ml_cache[v]
+    }
+
+    fn eliminate_vertex(&mut self, v: usize) {
+        self.graph.eliminate_vertex(v);
+        self.update_cache();
+        self.min_minfill = self
+            .graph
+            .vertices()
+            .map(|u| self.graph.degree(u))
+            .min()
+            .unwrap_or(0);
     }
 }
 
@@ -227,6 +507,9 @@ pub type MinFillDecomposer = HeuristicEliminationDecomposer<MinFillSelector>;
 pub type MinDegreeDecomposer = HeuristicEliminationDecomposer<MinDegreeSelector>;
 pub type MinFillDegree = HeuristicEliminationDecomposer<MinFillDegreeSelector>;
 
+pub type MinDegreeMLSelector = HeuristicEliminationDecomposer<DegreeMLSelector>;
+pub type MinFillMLSelector = HeuristicEliminationDecomposer<MinFillDegreeSelector>;
+
 pub struct HeuristicEliminationDecomposer<S: Selector> {
     selector: S,
     lowerbound: usize,
@@ -377,7 +660,11 @@ impl<S: Selector> HeuristicEliminationDecomposer<S> {
             eliminated_in_bag,
         })
     }
-    pub fn compute_order_and_decomposition2(self) -> Option<PermutationDecompositionResult> {
+    pub fn compute_order_and_decomposition2(
+        self,
+        epsilon: f64,
+        c: f64,
+    ) -> Option<PermutationDecompositionResult> {
         #[cfg(feature = "log")]
         info!("computing heuristic elimination td");
         let mut selector = self.selector;
@@ -390,7 +677,7 @@ impl<S: Selector> HeuristicEliminationDecomposer<S> {
 
         if selector.graph().order() > self.lowerbound + 1 {
             let mut max_bag = 2;
-            let mut pq = TWBinaryQueue::new(1.0, 0.75);
+            let mut pq = TWBinaryQueue::new(epsilon, c);
             for v in selector.graph().vertices() {
                 pq.insert(v, selector.value(v), orig_size - selector.graph().order())
             }
@@ -486,7 +773,7 @@ impl<S: Selector> AtomSolver for HeuristicEliminationDecomposer<S> {
             lowerbound: self.lowerbound,
             upperbound: self.upperbound,
         };
-        match self.compute_order_and_decomposition2() {
+        match self.compute_order_and_decomposition() {
             None => ComputationResult::Bounds(bounds),
             Some(result) => ComputationResult::ComputedTreeDecomposition(result.tree_decomposition),
         }

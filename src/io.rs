@@ -3,7 +3,10 @@ use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
 use crate::tree_decomposition::TreeDecomposition;
 use std::convert::TryFrom;
+use std::io::BufReader;
+use std::io::Read;
 use std::io::{BufRead, ErrorKind, Write};
+use std::os::unix::net::UnixStream;
 
 pub struct PaceReader<T: BufRead>(pub T);
 
@@ -133,4 +136,38 @@ fn parse_order(elements: &[&str]) -> Result<usize, std::io::Error> {
             "Invalid order of graph",
         )),
     }
+}
+
+pub const END_MARKER: &[u8] = b"<END>";
+
+pub fn read_until_marker(mut stream: &mut UnixStream) -> Vec<u8> {
+    let mut reader = BufReader::new(&mut stream);
+    let mut buffer = Vec::new();
+    let mut chunk = [0; 4096];
+
+    loop {
+        let bytes_read = reader.read(&mut chunk).unwrap();
+        if bytes_read == 0 {
+            break;
+        }
+
+        // Append the read data into the main buffer
+        buffer.extend_from_slice(&chunk[..bytes_read]);
+
+        // Check if the end marker exists in the buffer
+        if buffer
+            .windows(END_MARKER.len())
+            .any(|window| window == END_MARKER)
+        {
+            // Remove the end marker from the data
+            let marker_pos = buffer
+                .windows(END_MARKER.len())
+                .position(|window| window == END_MARKER)
+                .unwrap();
+            buffer.truncate(marker_pos);
+            break;
+        }
+    }
+
+    buffer // Return the message buffer without the end marker
 }
