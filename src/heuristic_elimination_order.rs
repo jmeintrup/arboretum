@@ -1,5 +1,6 @@
 use crate::datastructures::BinaryQueue;
 use crate::datastructures::TWBinaryQueue;
+use crate::graph;
 use crate::graph::BaseGraph;
 use crate::graph::HashMapGraph;
 use crate::graph::MutableGraph;
@@ -49,17 +50,13 @@ impl Selector for MinFillDegreeSelector {
         (self.inner.value(v) << 32) + (self.inner.graph.degree(v) as i64)
     }
 
-    fn eliminate_vertex(&mut self, v: usize, pq: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+    fn eliminate_vertex(&mut self, v: usize, pq: &mut BinaryQueue) -> BinaryQueue {
         let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
-        self.inner.eliminate_vertex(v, pq); // how does this func affect pq? do we need the following update?
-        if let Some(queue) = pq {
-            for u in nb {
-                queue.insert(u, self.value(u));
-            }
-            Some(queue.clone())
-        } else {
-            None
+        self.inner.eliminate_vertex(v, &mut *pq); // how does this func affect pq? do we need the following update?
+        for u in nb {
+            pq.insert(u, self.value(u));
         }
+        pq.clone()
     }
 }
 
@@ -82,18 +79,14 @@ impl Selector for MinDegreeSelector {
         self.graph.degree(v) as i64
     }
 
-    fn eliminate_vertex(&mut self, v: usize, pq: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+    fn eliminate_vertex(&mut self, v: usize, pq: &mut BinaryQueue) -> BinaryQueue {
         let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
         self.graph.eliminate_vertex(v);
 
-        if let Some(queue) = pq {
-            for u in nb {
-                queue.insert(u, self.value(u));
-            }
-            Some(queue.clone())
-        } else {
-            None
+        for u in nb {
+            pq.insert(u, self.value(u));
         }
+        pq.clone()
     }
 }
 
@@ -149,7 +142,7 @@ impl Selector for PureMLSelector {
         self.cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize, _: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+    fn eliminate_vertex(&mut self, v: usize, _: &mut BinaryQueue) -> BinaryQueue {
         self.graph.eliminate_vertex(v);
         self.update_cache();
 
@@ -157,7 +150,7 @@ impl Selector for PureMLSelector {
         for v in self.graph().vertices() {
             pq.insert(v, self.value(v))
         }
-        Some(pq)
+        pq
     }
 }
 
@@ -217,7 +210,7 @@ impl Selector for DegreeMLSelector {
         self.cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize, _: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+    fn eliminate_vertex(&mut self, v: usize, _: &mut BinaryQueue) -> BinaryQueue {
         self.graph.eliminate_vertex(v);
         self.update_cache();
         self.min_degree = self
@@ -231,7 +224,7 @@ impl Selector for DegreeMLSelector {
         for v in self.graph().vertices() {
             pq.insert(v, self.value(v))
         }
-        Some(pq)
+        pq
     }
 }
 
@@ -286,7 +279,7 @@ impl Selector for FillMLSelector {
         (self.fill_in_count(v) as i64) * 1000 + self.ml_cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize, _: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+    fn eliminate_vertex(&mut self, v: usize, _: &mut BinaryQueue) -> BinaryQueue {
         self.eliminate_with_info(v);
         self.update_cache();
 
@@ -294,7 +287,7 @@ impl Selector for FillMLSelector {
         for v in self.graph().vertices() {
             pq.insert(v, self.value(v))
         }
-        Some(pq)
+        pq
     }
 }
 
@@ -463,18 +456,13 @@ impl Selector for MinFillSelector {
         self.fill_in_count(v) as i64
     }
 
-    fn eliminate_vertex(&mut self, v: usize, pq: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+    fn eliminate_vertex(&mut self, v: usize, pq: &mut BinaryQueue) -> BinaryQueue {
         let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
         self.eliminate_with_info(v);
-
-        if let Some(queue) = pq {
-            for u in nb {
-                queue.insert(u, self.value(u));
-            }
-            Some(queue.clone())
-        } else {
-            None
+        for u in nb {
+            pq.insert(u, self.value(u));
         }
+        pq.clone()
     }
 }
 
@@ -595,7 +583,7 @@ pub(crate) struct FillInfo {
 pub trait Selector: From<HashMapGraph> {
     fn graph(&self) -> &HashMapGraph;
     fn value(&self, v: usize) -> i64;
-    fn eliminate_vertex(&mut self, v: usize, pq: &mut Option<BinaryQueue>) -> Option<BinaryQueue>;
+    fn eliminate_vertex(&mut self, v: usize, pq: &mut BinaryQueue) -> BinaryQueue;
 }
 
 pub type MinFillDecomposer = HeuristicEliminationDecomposer<MinFillSelector>;
@@ -731,23 +719,21 @@ impl<S: Selector> HeuristicEliminationDecomposer<S> {
                 bag.insert(u);
                 eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
 
-                let mut option_pq: Option<BinaryQueue> = Some(pq);
-                option_pq = selector.eliminate_vertex(u, &mut option_pq);
-                pq = option_pq.unwrap()
+                pq = selector.eliminate_vertex(u, &mut pq);
             }
         }
 
         // remaining vertices, arbitrary order
-        while selector.graph().order() > 0 {
-            let u = selector.graph().vertices().next().unwrap();
-            let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
+        let mut graph = selector.graph().clone();
+        while graph.order() > 0 {
+            let u = graph.vertices().next().unwrap();
+            let nb: FxHashSet<usize> = graph.neighborhood(u).collect();
             permutation.push(u);
             let mut bag = nb.clone();
             bag.insert(u);
             eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
 
-            let mut option_pq: Option<BinaryQueue> = None;
-            selector.eliminate_vertex(u, &mut option_pq);
+            graph.eliminate_vertex(u);
         }
 
         permutation_td_connect_helper(&mut tree_decomposition, &permutation, &eliminated_in_bag);
@@ -947,8 +933,8 @@ mod tests {
 
         while let Some(v) = vertices.pop() {
             graph.eliminate_vertex(v);
-            let mut option_pq: Option<BinaryQueue> = None;
-            selector.eliminate_vertex(v, &mut option_pq);
+            let mut pq: BinaryQueue = BinaryQueue::new();
+            selector.eliminate_vertex(v, &mut pq);
 
             let mut a: Vec<_> = selector.graph.vertices().collect();
             a.sort_unstable();
