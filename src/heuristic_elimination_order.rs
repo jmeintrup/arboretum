@@ -133,6 +133,9 @@ impl Selector for PureMLSelector {
     fn eliminate_vertex(&mut self, v: usize) {
         self.graph.eliminate_vertex(v);
         self.update_cache();
+        //for u in self.graph.vertices {
+        //    pq.insert(self.value())
+        //}
     }
 }
 
@@ -201,11 +204,13 @@ impl Selector for DegreeMLSelector {
             .map(|u| self.graph.degree(u))
             .min()
             .unwrap_or(0);
+        //for u in self.graph.vertices {
+        //    pq.insert(self.value())
+        //}
     }
 }
 
 pub struct FillMLSelector {
-    min_minfill: usize,
     graph: HashMapGraph,
     cache: FxHashMap<usize, usize>,
     ml_cache: Vec<i64>,
@@ -217,11 +222,6 @@ impl From<HashMapGraph> for FillMLSelector {
         let socket_path = get_socket_path();
         let stream = UnixStream::connect(socket_path).expect("Failed to connect to the server");
         let ml_cache = vec![0; graph.order()];
-        let min_minfill = graph
-            .vertices()
-            .map(|u| graph.fill_in_count(u))
-            .min()
-            .unwrap();
 
         let mut cache = FxHashMap::with_capacity_and_hasher(graph.order(), Default::default());
         for u in graph.vertices() {
@@ -242,7 +242,6 @@ impl From<HashMapGraph> for FillMLSelector {
             }
         }
         let mut ml_selector = Self {
-            min_minfill,
             graph,
             cache,
             ml_cache,
@@ -259,21 +258,15 @@ impl Selector for FillMLSelector {
     }
 
     fn value(&self, v: usize) -> i64 {
-        if self.graph.fill_in_count(v) > self.min_minfill {
-            return 60_000;
-        }
-        self.ml_cache[v]
+        (self.fill_in_count(v) as i64) * 1000 + self.ml_cache[v]
     }
 
     fn eliminate_vertex(&mut self, v: usize) {
         self.eliminate_with_info(v);
         self.update_cache();
-        self.min_minfill = self
-            .graph
-            .vertices()
-            .map(|u| self.graph.fill_in_count(u))
-            .min()
-            .unwrap_or(0);
+        //for u in self.graph.vertices {
+        //    pq.insert(self.value())
+        //}
     }
 }
 
@@ -443,7 +436,18 @@ impl Selector for MinFillSelector {
     }
 
     fn eliminate_vertex(&mut self, v: usize) {
+        //fn eliminate_vertex(&mut self, v: usize, pq: mut pq ...) -> pq {
+        // 
+        //for u in self.graph.neighborhood(v) {
+        //    pq.insert(u, selector.value(u));
+        //}
+        // let nb = self.graph.neighborhood_set(v).clone();
         self.eliminate_with_info(v);
+
+        //for u in nb {
+        //    pq.insert(u, selector.value(u));
+        //}
+        // pq
     }
 }
 
