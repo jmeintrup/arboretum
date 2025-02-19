@@ -49,8 +49,17 @@ impl Selector for MinFillDegreeSelector {
         (self.inner.value(v) << 32) + (self.inner.graph.degree(v) as i64)
     }
 
-    fn eliminate_vertex(&mut self, v: usize) {
-        self.inner.eliminate_vertex(v);
+    fn eliminate_vertex(&mut self, v: usize, pq: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+        let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
+        self.inner.eliminate_vertex(v, pq); // how does this func affect pq? do we need the following update?
+        if let Some(queue) = pq {
+            for u in nb {
+                queue.insert(u, self.value(u));
+            }
+            Some(queue.clone())
+        } else {
+            None
+        }
     }
 }
 
@@ -73,8 +82,18 @@ impl Selector for MinDegreeSelector {
         self.graph.degree(v) as i64
     }
 
-    fn eliminate_vertex(&mut self, v: usize) {
+    fn eliminate_vertex(&mut self, v: usize, pq: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+        let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
         self.graph.eliminate_vertex(v);
+
+        if let Some(queue) = pq {
+            for u in nb {
+                queue.insert(u, self.value(u));
+            }
+            Some(queue.clone())
+        } else {
+            None
+        }
     }
 }
 
@@ -130,12 +149,15 @@ impl Selector for PureMLSelector {
         self.cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize) {
+    fn eliminate_vertex(&mut self, v: usize, _: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
         self.graph.eliminate_vertex(v);
         self.update_cache();
-        //for u in self.graph.vertices {
-        //    pq.insert(self.value())
-        //}
+
+        let mut pq = BinaryQueue::new();
+        for v in self.graph().vertices() {
+            pq.insert(v, self.value(v))
+        }
+        Some(pq)
     }
 }
 
@@ -195,7 +217,7 @@ impl Selector for DegreeMLSelector {
         self.cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize) {
+    fn eliminate_vertex(&mut self, v: usize, _: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
         self.graph.eliminate_vertex(v);
         self.update_cache();
         self.min_degree = self
@@ -204,9 +226,12 @@ impl Selector for DegreeMLSelector {
             .map(|u| self.graph.degree(u))
             .min()
             .unwrap_or(0);
-        //for u in self.graph.vertices {
-        //    pq.insert(self.value())
-        //}
+
+        let mut pq = BinaryQueue::new();
+        for v in self.graph().vertices() {
+            pq.insert(v, self.value(v))
+        }
+        Some(pq)
     }
 }
 
@@ -261,12 +286,15 @@ impl Selector for FillMLSelector {
         (self.fill_in_count(v) as i64) * 1000 + self.ml_cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize) {
+    fn eliminate_vertex(&mut self, v: usize, _: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
         self.eliminate_with_info(v);
         self.update_cache();
-        //for u in self.graph.vertices {
-        //    pq.insert(self.value())
-        //}
+
+        let mut pq = BinaryQueue::new();
+        for v in self.graph().vertices() {
+            pq.insert(v, self.value(v))
+        }
+        Some(pq)
     }
 }
 
@@ -435,19 +463,18 @@ impl Selector for MinFillSelector {
         self.fill_in_count(v) as i64
     }
 
-    fn eliminate_vertex(&mut self, v: usize) {
-        //fn eliminate_vertex(&mut self, v: usize, pq: mut pq ...) -> pq {
-        // 
-        //for u in self.graph.neighborhood(v) {
-        //    pq.insert(u, selector.value(u));
-        //}
-        // let nb = self.graph.neighborhood_set(v).clone();
+    fn eliminate_vertex(&mut self, v: usize, pq: &mut Option<BinaryQueue>) -> Option<BinaryQueue> {
+        let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
         self.eliminate_with_info(v);
 
-        //for u in nb {
-        //    pq.insert(u, selector.value(u));
-        //}
-        // pq
+        if let Some(queue) = pq {
+            for u in nb {
+                queue.insert(u, self.value(u));
+            }
+            Some(queue.clone())
+        } else {
+            None
+        }
     }
 }
 
@@ -568,7 +595,7 @@ pub(crate) struct FillInfo {
 pub trait Selector: From<HashMapGraph> {
     fn graph(&self) -> &HashMapGraph;
     fn value(&self, v: usize) -> i64;
-    fn eliminate_vertex(&mut self, v: usize);
+    fn eliminate_vertex(&mut self, v: usize, pq: &mut Option<BinaryQueue>) -> Option<BinaryQueue>;
 }
 
 pub type MinFillDecomposer = HeuristicEliminationDecomposer<MinFillSelector>;
@@ -703,10 +730,10 @@ impl<S: Selector> HeuristicEliminationDecomposer<S> {
                 let mut bag = nb.clone();
                 bag.insert(u);
                 eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
-                selector.eliminate_vertex(u);
-                for u in nb {
-                    pq.insert(u, selector.value(u));
-                }
+
+                let mut option_pq: Option<BinaryQueue> = Some(pq);
+                option_pq = selector.eliminate_vertex(u, &mut option_pq);
+                pq = option_pq.unwrap()
             }
         }
 
@@ -718,86 +745,9 @@ impl<S: Selector> HeuristicEliminationDecomposer<S> {
             let mut bag = nb.clone();
             bag.insert(u);
             eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
-            selector.eliminate_vertex(u);
-        }
 
-        permutation_td_connect_helper(&mut tree_decomposition, &permutation, &eliminated_in_bag);
-
-        Some(PermutationDecompositionResult {
-            permutation,
-            tree_decomposition,
-            eliminated_in_bag,
-        })
-    }
-    pub fn compute_order_and_decomposition2(
-        self,
-        epsilon: f64,
-        c: f64,
-    ) -> Option<PermutationDecompositionResult> {
-        #[cfg(feature = "log")]
-        info!("computing heuristic elimination td");
-        let mut selector = self.selector;
-        let mut permutation: Vec<usize> = vec![];
-        let upperbound = self.upperbound;
-        let lowerbound = self.lowerbound;
-        let mut tree_decomposition = TreeDecomposition::default();
-        let mut eliminated_in_bag: FxHashMap<usize, usize> = FxHashMap::default();
-        let orig_size = selector.graph().order();
-
-        if selector.graph().order() > self.lowerbound + 1 {
-            let mut max_bag = 2;
-            let mut pq = TWBinaryQueue::new(epsilon, c);
-            for v in selector.graph().vertices() {
-                pq.insert(v, selector.value(v), orig_size - selector.graph().order())
-            }
-            while let Some((u, _)) = pq.pop_min() {
-                if selector.graph().order() <= max_bag || selector.graph().order() <= lowerbound + 1
-                {
-                    break;
-                }
-
-                #[cfg(feature = "handle-ctrlc")]
-                if crate::signals::received_ctrl_c() {
-                    // unknown lowerbound
-                    #[cfg(feature = "log")]
-                    info!("breaking heuristic elimination td due to ctrl+c");
-                    break;
-                }
-
-                #[cfg(feature = "cli")]
-                if crate::timeout::timeout() {
-                    // unknown lowerbound
-                    #[cfg(feature = "log")]
-                    info!("breaking heuristic elimination td due to timeout!");
-                    break;
-                }
-
-                if selector.graph().degree(u) > upperbound {
-                    return None;
-                }
-
-                let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
-                max_bag = max(max_bag, nb.len() + 1);
-                permutation.push(u);
-                let mut bag = nb.clone();
-                bag.insert(u);
-                eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
-                selector.eliminate_vertex(u);
-                for u in selector.graph().vertices() {
-                    pq.insert(u, selector.value(u), orig_size - selector.graph().order())
-                }
-            }
-        }
-
-        // remaining vertices, arbitrary order
-        while selector.graph().order() > 0 {
-            let u = selector.graph().vertices().next().unwrap();
-            let nb: FxHashSet<usize> = selector.graph().neighborhood(u).collect();
-            permutation.push(u);
-            let mut bag = nb.clone();
-            bag.insert(u);
-            eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
-            selector.eliminate_vertex(u);
+            let mut option_pq: Option<BinaryQueue> = None;
+            selector.eliminate_vertex(u, &mut option_pq);
         }
 
         permutation_td_connect_helper(&mut tree_decomposition, &permutation, &eliminated_in_bag);
@@ -938,6 +888,7 @@ pub fn heuristic_elimination_decompose<S: Selector>(graph: HashMapGraph) -> Tree
 
 #[cfg(test)]
 mod tests {
+    use crate::datastructures::BinaryQueue;
     use crate::graph::BaseGraph;
     use crate::graph::HashMapGraph;
     use crate::graph::MutableGraph;
@@ -996,7 +947,8 @@ mod tests {
 
         while let Some(v) = vertices.pop() {
             graph.eliminate_vertex(v);
-            selector.eliminate_vertex(v);
+            let mut option_pq: Option<BinaryQueue> = None;
+            selector.eliminate_vertex(v, &mut option_pq);
 
             let mut a: Vec<_> = selector.graph.vertices().collect();
             a.sort_unstable();

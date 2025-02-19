@@ -426,6 +426,7 @@ impl Index<usize> for BitSet {
     }
 }
 
+#[derive(Clone)]
 pub struct BinaryQueue {
     heap: Vec<usize>,
     values: FxHashMap<usize, i64>,
