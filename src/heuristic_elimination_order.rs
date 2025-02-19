@@ -82,7 +82,7 @@ impl Selector for MinDegreeSelector {
         for u in nb {
             pq.insert(u, self.value(u));
         }
-        pq.clone()
+        pq
     }
 }
 
@@ -458,7 +458,7 @@ impl Selector for MinFillSelector {
         for u in nb {
             pq.insert(u, self.value(u));
         }
-        pq.clone()
+        pq
     }
 }
 
