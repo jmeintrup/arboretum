@@ -50,13 +50,9 @@ impl Selector for MinFillDegreeSelector {
         (self.inner.value(v) << 32) + (self.inner.graph.degree(v) as i64)
     }
 
-    fn eliminate_vertex(&mut self, v: usize, pq: &mut BinaryQueue) -> BinaryQueue {
+    fn eliminate_vertex(&mut self, v: usize, mut pq: BinaryQueue) -> BinaryQueue {
         let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
-        self.inner.eliminate_vertex(v, &mut *pq); // how does this func affect pq? do we need the following update?
-        for u in nb {
-            pq.insert(u, self.value(u));
-        }
-        pq.clone()
+        self.inner.eliminate_vertex(v, pq)
     }
 }
 
@@ -79,7 +75,7 @@ impl Selector for MinDegreeSelector {
         self.graph.degree(v) as i64
     }
 
-    fn eliminate_vertex(&mut self, v: usize, pq: &mut BinaryQueue) -> BinaryQueue {
+    fn eliminate_vertex(&mut self, v: usize, mut pq: BinaryQueue) -> BinaryQueue {
         let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
         self.graph.eliminate_vertex(v);
 
@@ -142,7 +138,7 @@ impl Selector for PureMLSelector {
         self.cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize, _: &mut BinaryQueue) -> BinaryQueue {
+    fn eliminate_vertex(&mut self, v: usize, _:  BinaryQueue) -> BinaryQueue {
         self.graph.eliminate_vertex(v);
         self.update_cache();
 
@@ -210,7 +206,7 @@ impl Selector for DegreeMLSelector {
         self.cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize, _: &mut BinaryQueue) -> BinaryQueue {
+    fn eliminate_vertex(&mut self, v: usize, _:  BinaryQueue) -> BinaryQueue {
         self.graph.eliminate_vertex(v);
         self.update_cache();
         self.min_degree = self
@@ -279,7 +275,7 @@ impl Selector for FillMLSelector {
         (self.fill_in_count(v) as i64) * 1000 + self.ml_cache[v]
     }
 
-    fn eliminate_vertex(&mut self, v: usize, _: &mut BinaryQueue) -> BinaryQueue {
+    fn eliminate_vertex(&mut self, v: usize, _:  BinaryQueue) -> BinaryQueue {
         self.eliminate_with_info(v);
         self.update_cache();
 
@@ -456,7 +452,7 @@ impl Selector for MinFillSelector {
         self.fill_in_count(v) as i64
     }
 
-    fn eliminate_vertex(&mut self, v: usize, pq: &mut BinaryQueue) -> BinaryQueue {
+    fn eliminate_vertex(&mut self, v: usize, mut pq: BinaryQueue) -> BinaryQueue {
         let nb: FxHashSet<usize> = self.graph().neighborhood(v).collect();
         self.eliminate_with_info(v);
         for u in nb {
@@ -583,7 +579,7 @@ pub(crate) struct FillInfo {
 pub trait Selector: From<HashMapGraph> {
     fn graph(&self) -> &HashMapGraph;
     fn value(&self, v: usize) -> i64;
-    fn eliminate_vertex(&mut self, v: usize, pq: &mut BinaryQueue) -> BinaryQueue;
+    fn eliminate_vertex(&mut self, v: usize, pq: BinaryQueue) -> BinaryQueue;
 }
 
 pub type MinFillDecomposer = HeuristicEliminationDecomposer<MinFillSelector>;
@@ -719,7 +715,7 @@ impl<S: Selector> HeuristicEliminationDecomposer<S> {
                 bag.insert(u);
                 eliminated_in_bag.insert(u, tree_decomposition.add_bag(bag));
 
-                pq = selector.eliminate_vertex(u, &mut pq);
+                pq = selector.eliminate_vertex(u, pq);
             }
         }
 
@@ -933,8 +929,8 @@ mod tests {
 
         while let Some(v) = vertices.pop() {
             graph.eliminate_vertex(v);
-            let mut pq: BinaryQueue = BinaryQueue::new();
-            selector.eliminate_vertex(v, &mut pq);
+            let pq: BinaryQueue = BinaryQueue::new();
+            selector.eliminate_vertex(v, pq);
 
             let mut a: Vec<_> = selector.graph.vertices().collect();
             a.sort_unstable();
